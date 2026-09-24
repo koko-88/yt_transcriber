@@ -53,5 +53,5 @@ storybook-static
 # Local UI workflow artifacts
 .storybook-cache
 .ui-install.*
+.ui-update.*
 .npm-ci.*
-
