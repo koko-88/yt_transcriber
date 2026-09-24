@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main, feature/v1-implementation]
+  pull_request:
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        run: npx vitest run
+
+      - name: Build extension (Chrome MV3)
+        run: npx wxt build
+
+      - name: Zip build artifact
+        run: npx wxt zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: yt-transcriber-chrome-mv3
+          path: .output/*.zip
+          retention-days: 14
