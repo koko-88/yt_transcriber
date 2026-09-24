@@ -25,6 +25,7 @@ export async function geminiGenerate(opts: {
   messages: ChatMessage[];
   secret: Secret;
   maxTokens?: number;
+  signal?: AbortSignal;
 }): Promise<string> {
   const system = opts.messages.find((m) => m.role === "system")?.content;
   const user = opts.messages
@@ -49,7 +50,8 @@ export async function geminiGenerate(opts: {
         temperature: 0.3,
       },
     }),
-    timeoutMs: 120_000,
+    timeoutMs: 180_000,
+    ...(opts.signal ? { signal: opts.signal } : {}),
   });
 
   if (!res.ok) {

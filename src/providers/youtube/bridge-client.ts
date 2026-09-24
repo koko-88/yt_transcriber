@@ -25,9 +25,10 @@ export interface BridgeClient {
     languageCode: string;
     kind?: string;
     vssId?: string;
+    forceReload?: boolean;
   }): Promise<void>;
   restorePlayback(): Promise<void>;
-  ensurePlaying(): Promise<void>;
+  ensurePlaying(forceNudge?: boolean): Promise<void>;
   startCapture(): Promise<void>;
   stopCapture(): Promise<void>;
   seek(seconds: number): Promise<void>;
@@ -162,7 +163,13 @@ export function createBridgeClient(win: Window = window): BridgeClient {
     return parsed.data;
   }
 
-  const emptyOk = z.object({}).passthrough().nullable();
+  // MAIN-world void operations respond without a data field. Accept that
+  // successful shape as well as legacy null/object acknowledgements.
+  const emptyOk = z.union([
+    z.undefined(),
+    z.null(),
+    z.object({}).passthrough(),
+  ]);
 
   return {
     async hello() {
@@ -177,8 +184,8 @@ export function createBridgeClient(win: Window = window): BridgeClient {
     async restorePlayback() {
       await expect("restorePlayback", emptyOk);
     },
-    async ensurePlaying() {
-      await expect("ensurePlaying", emptyOk);
+    async ensurePlaying(forceNudge = false) {
+      await expect("ensurePlaying", emptyOk, { forceNudge });
     },
     async startCapture() {
       await expect("startCapture", emptyOk);

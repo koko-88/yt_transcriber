@@ -1,13 +1,16 @@
 // Network egress gate: all remote fetches go through gatedFetch, which
 // validates the scheme/host, refuses redirects (so credentials can never
 // follow a provider-controlled redirect off the allow-listed origin), omits
-// cookies, and enforces a timeout. Called from background only.
+// cookies, and enforces a timeout. Called from trusted extension contexts
+// (side panel / background) — never from content scripts.
 
 export interface GatedFetchOptions {
   method?: string;
   headers?: Record<string, string>;
   body?: string;
   timeoutMs?: number;
+  /** Caller abort (e.g. panel closed / user cancel). */
+  signal?: AbortSignal;
   /** Injection point for tests; defaults to the global fetch. */
   fetchImpl?: typeof fetch;
 }
@@ -32,6 +35,14 @@ export async function gatedFetch(
   const timeoutMs = opts.timeoutMs ?? 30_000;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onExternalAbort = () => controller.abort();
+  if (opts.signal) {
+    if (opts.signal.aborted) {
+      clearTimeout(timer);
+      throw new DOMException("Aborted", "AbortError");
+    }
+    opts.signal.addEventListener("abort", onExternalAbort, { once: true });
+  }
   try {
     return await (opts.fetchImpl ?? fetch)(url, {
       method: opts.method ?? "GET",
@@ -43,6 +54,7 @@ export async function gatedFetch(
     });
   } finally {
     clearTimeout(timer);
+    opts.signal?.removeEventListener("abort", onExternalAbort);
   }
 }
 

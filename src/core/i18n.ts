@@ -48,7 +48,10 @@ export const messages = {
 
     // Availability
     "availability.available": "Transcript available",
-    "availability.no-captions": "No captions available for this video",
+    "availability.available-partial":
+      "Only part of this caption track was returned. Retry to get the complete transcript.",
+    "availability.no-captions":
+      "No YouTube captions are available for this video. Audio transcription is not available in this version.",
     "availability.login-required": "Sign in to YouTube to view this transcript",
     "availability.age-restricted": "This video is age-restricted",
     "availability.members-only": "This video is for channel members only",
@@ -59,7 +62,7 @@ export const messages = {
     "availability.fetch-empty":
       "Captions exist but returned empty data. Try reloading the page.",
     "availability.needs-player-interaction":
-      "Play the video or enable captions to load the transcript",
+      "YouTube did not issue a caption response. Retry the extraction.",
     "availability.parse-failed": "Failed to parse the caption data",
     "availability.unsupported-page-structure":
       "YouTube page structure has changed. Check for extension updates.",
@@ -219,7 +222,10 @@ export const messages = {
 
     // Availability
     "availability.available": "النسخة النصية متاحة",
-    "availability.no-captions": "لا تتوفر تعليقات توضيحية لهذا الفيديو",
+    "availability.available-partial":
+      "تم إرجاع جزء فقط من مسار الترجمة. أعد المحاولة للحصول على النص الكامل.",
+    "availability.no-captions":
+      "لا تتوفر ترجمة من YouTube لهذا الفيديو. نسخ الصوت غير متاح في هذا الإصدار.",
     "availability.login-required":
       "سجّل الدخول إلى YouTube لعرض هذه النسخة النصية",
     "availability.age-restricted": "هذا الفيديو مقيد بالعمر",
@@ -231,7 +237,7 @@ export const messages = {
     "availability.fetch-empty":
       "التعليقات موجودة لكنها أعادت بيانات فارغة. حاول إعادة تحميل الصفحة.",
     "availability.needs-player-interaction":
-      "شغّل الفيديو أو فعّل التعليقات لتحميل النسخة النصية",
+      "لم يُصدر YouTube استجابة للترجمة. أعد محاولة الاستخراج.",
     "availability.parse-failed": "فشل في تحليل بيانات التعليقات",
     "availability.unsupported-page-structure":
       "تغير هيكل صفحة YouTube. تحقق من تحديثات الإضافة.",

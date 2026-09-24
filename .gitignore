@@ -1,3 +1,48 @@
-node_modules
-.wxt
-.output
+# Dependencies
+node_modules/
+
+# Build / WXT
+.wxt/
+.output/
+
+# Test / coverage artifacts
+coverage/
+test-results/
+playwright-report/
+blob-report/
+*.lcov
+
+# Logs
+*.log
+webext.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment / secrets (never commit)
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+credentials.json
+service-account*.json
+.submit.env
+.env.submit
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json.example
+
+# Cursor local (MCP auth, etc.)
+.cursor/
+
+# Local spike / scratch
+spike/
+*.local.*

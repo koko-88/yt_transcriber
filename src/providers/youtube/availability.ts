@@ -36,6 +36,7 @@ export function mapSnapshotToAvailability(snap: PlayerSnapshot): Availability {
 }
 
 export const RETRYABLE: ReadonlySet<Availability> = new Set([
+  "available-partial",
   "fetch-empty",
   "needs-player-interaction",
   "network-error",

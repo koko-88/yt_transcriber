@@ -63,9 +63,17 @@ export default defineConfig({
         browser_specific_settings: {
           gecko: {
             id: "transcript-workbench@yt-transcriber",
-            strict_min_version: "140.0",
-            // This extension collects no user data; required by AMO for new submissions.
-            data_collection_permissions: {},
+            strict_min_version: "142.0",
+            // Core product transmits nothing by default (required: none).
+            // Optional AI may send transcript text to a user-chosen provider
+            // (optional: websiteContent), requested via permissions.request
+            // when Firefox exposes data_collection consent. web-ext requires
+            // the `required` key; none+optional is the AMO-valid shape for
+            // opt-in transmission (see Extension Workshop + addons-linter).
+            data_collection_permissions: {
+              required: ["none"],
+              optional: ["websiteContent"],
+            },
           },
         },
         sidebar_action: {

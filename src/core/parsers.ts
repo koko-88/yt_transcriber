@@ -18,7 +18,7 @@ interface Json3Response {
 }
 
 /** Size limits to prevent abuse */
-const MAX_BODY_BYTES = 8 * 1024 * 1024; // 8 MB
+const MAX_BODY_BYTES = 30 * 1024 * 1024;
 const MAX_SEGMENTS = 100_000;
 
 /**
@@ -41,7 +41,7 @@ export function parseJson3(raw: string): TranscriptSegment[] | null {
   let index = 0;
 
   for (const event of data.events) {
-    if (index >= MAX_SEGMENTS) break;
+    if (index >= MAX_SEGMENTS) return null;
 
     // Skip window/style events and append events
     if (event.aAppend !== undefined) continue;
@@ -88,7 +88,7 @@ export function parseSrv3(raw: string): TranscriptSegment[] | null {
   let match: RegExpExecArray | null;
 
   while ((match = segmentRegex.exec(raw)) !== null) {
-    if (index >= MAX_SEGMENTS) break;
+    if (index >= MAX_SEGMENTS) return null;
 
     const startSec = parseFloat(match[1] ?? "0");
     const durSec = parseFloat(match[2] ?? "0");
@@ -124,7 +124,7 @@ export function parseVtt(raw: string): TranscriptSegment[] | null {
   }
 
   while (i < lines.length) {
-    if (index >= MAX_SEGMENTS) break;
+    if (index >= MAX_SEGMENTS) return null;
 
     const line = lines[i] ?? "";
     const timeMatch = line.match(

@@ -67,6 +67,14 @@ export type CaptionFormat = "json3" | "srv3" | "vtt";
 export interface TranscriptSource {
   readonly method: AcquisitionMethod;
   readonly format: CaptionFormat;
+  readonly completeness?:
+    | {
+        readonly status: "complete";
+        readonly firstCueMs: number;
+        readonly lastCueEndMs: number;
+        readonly videoDurationMs?: number | undefined;
+      }
+    | undefined;
 }
 
 /** Schema version for stored transcripts */

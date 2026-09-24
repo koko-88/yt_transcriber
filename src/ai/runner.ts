@@ -13,7 +13,7 @@ import { getProviderDef } from "./registry.js";
 
 const perms = createPermissionManager();
 const encoder = new TextEncoder();
-import { buildMessages, PROMPT_VERSION } from "./pipelines.js";
+import { buildMessages, groundAiOutput, PROMPT_VERSION } from "./pipelines.js";
 import { chatCompletion } from "./providers/openai-compat.js";
 import { geminiGenerate } from "./providers/gemini.js";
 import type { AiRunRequest, AiRunResult } from "./types.js";
@@ -68,9 +68,17 @@ async function pruneAiCache(
   await tx.done;
 }
 
+/**
+ * Run an AI pipeline. Designed to execute in an extension *page* (side panel)
+ * rather than the background service worker: Chrome may terminate a SW when a
+ * fetch takes >30s to first byte, which is common for local models and long
+ * summaries. Secrets stay in extension-origin storage; the panel is a trusted
+ * extension context.
+ */
 export async function runAi(
   req: AiRunRequest,
   consentGiven = false,
+  signal?: AbortSignal,
 ): Promise<AiRunResult> {
   try {
     const def = getProviderDef(req.providerId);
@@ -137,16 +145,26 @@ export async function runAi(
     if (cached)
       return { ok: true, text: cached, provider: def.label, model: req.model };
 
+    if (signal?.aborted) {
+      throw new AppError({
+        code: "AI_CANCELLED",
+        message: "cancelled",
+        retryable: false,
+      });
+    }
+
     await getRateLimiter(def.id).acquire();
 
     const fn = def.kind === "gemini" ? geminiGenerate : chatCompletion;
-    const text = await fn({
+    const raw = await fn({
       baseUrl: def.baseUrl,
       model: req.model,
       messages,
       secret: secret!,
+      ...(signal ? { signal } : {}),
     });
 
+    const text = groundAiOutput(req.pipeline, raw, transcript);
     await cachePut(cacheKey, text);
     logger.info("ai", "pipeline completed", {
       pipeline: req.pipeline,
@@ -156,6 +174,14 @@ export async function runAi(
     });
     return { ok: true, text, provider: def.label, model: req.model };
   } catch (err) {
+    if (signal?.aborted) {
+      return {
+        ok: false,
+        errorCode: "AI_CANCELLED",
+        errorMessage: "cancelled",
+        retryable: false,
+      };
+    }
     const e =
       err instanceof AppError
         ? err

@@ -5,9 +5,10 @@
 // Post-build manifest assertions. Fails the build if the generated manifests
 // violate the permission/CSP policy documented in SECURITY.md.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 
 let failures = 0;
 function check(name, cond, detail = "") {
@@ -43,10 +44,15 @@ const PROVIDER_ORIGINS = [
   "http://127.0.0.1/*",
 ];
 
+const filter = new Set(
+  process.argv.slice(2).filter((a) => a === "chrome" || a === "firefox"),
+);
+
 for (const [browserName, rel] of [
   ["chrome", ".output/chrome-mv3/manifest.json"],
   ["firefox", ".output/firefox-mv2/manifest.json"],
 ]) {
+  if (filter.size > 0 && !filter.has(browserName)) continue;
   const m = load(rel);
   if (!m) {
     console.log(`  skip ${browserName} (not built: ${rel})`);
@@ -95,6 +101,27 @@ for (const [browserName, rel] of [
     `${browserName}: CSP no remote script`,
     !/script-src[^;]*https?:/.test(csp),
   );
+
+  if (browserName === "firefox") {
+    const dcp = m.browser_specific_settings?.gecko?.data_collection_permissions;
+    check(
+      `${browserName}: data_collection_permissions present`,
+      !!dcp,
+      JSON.stringify(dcp),
+    );
+    check(
+      `${browserName}: required none (no required transmission)`,
+      Array.isArray(dcp?.required) &&
+        dcp.required.length === 1 &&
+        dcp.required[0] === "none",
+      JSON.stringify(dcp),
+    );
+    check(
+      `${browserName}: optional websiteContent for AI`,
+      Array.isArray(dcp?.optional) && dcp.optional.includes("websiteContent"),
+      JSON.stringify(dcp),
+    );
+  }
 }
 
 if (failures > 0) {

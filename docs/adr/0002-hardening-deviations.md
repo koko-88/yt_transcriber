@@ -53,9 +53,11 @@ never grant provider access.
 optional origins at all. The config now mirrors `optional_host_permissions` into
 `optional_permissions` for the Firefox branch, and
 `scripts/check-manifest.mjs` fails the build if the AI origins are not
-requestable in _either_ browser's manifest. Firefox also gets
-`browser_specific_settings.gecko.data_collection_permissions` (empty), required
-by AMO for new submissions.
+requestable in _either_ browser's manifest. Firefox declares
+`data_collection_permissions: { required: ["none"], optional: ["websiteContent"] }`
+(AMO-valid: `required` is mandatory; `none` means no required transmission;
+optional AI is opt-in). The AI tab requests `websiteContent` when Firefox
+exposes `permissions.getAll().data_collection`.
 
 ## 4. One network choke point
 
@@ -69,3 +71,17 @@ injection point so the guarantees are unit-tested.
 **Evidence:** `fetch-gate.ts` had no importers; the shipped gate was tested only
 implicitly through provider calls. Security regressions now fail in
 `tests/security.test.ts`.
+
+## 5. Long AI requests run in the side panel
+
+The plan placed AI orchestration in the background service worker. Chrome may
+terminate a service worker when a `fetch()` response takes more than ~30 seconds
+to arrive, which is common for local models (Ollama/LM Studio) and long
+summaries. The panel is a trusted extension page that stays alive while the
+user watches the result.
+
+**Evidence:** Chrome extension service-worker lifecycle docs (idle ~30s;
+response-arrival limit ~30s; hard ~5 minute cap). `ai/runner.ts` is imported
+by `ui/views/AiView.tsx`; secrets remain in extension-origin storage; content
+scripts never receive keys. AbortController cancels the run when the panel
+unmounts or the user clicks Cancel.

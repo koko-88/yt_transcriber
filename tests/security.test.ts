@@ -127,6 +127,23 @@ describe("message boundary", () => {
           id: extId,
         } as never),
       ).toBe("extension-page");
+      // Opened as a tab (E2E / "Open in tab") still has sender.tab set.
+      expect(
+        classifySender({
+          url: `chrome-extension://${extId}/sidepanel.html`,
+          origin: `chrome-extension://${extId}`,
+          id: extId,
+          tab: { id: 1 },
+        } as never),
+      ).toBe("extension-page");
+      expect(
+        classifySender({
+          url: `moz-extension://${extId}/sidepanel.html`,
+          origin: `moz-extension://${extId}`,
+          id: extId,
+          tab: { id: 2 },
+        } as never),
+      ).toBe("extension-page");
       expect(classifySender({ id: extId } as never)).toBe("untrusted");
     } finally {
       Object.defineProperty(browser.runtime, "id", {

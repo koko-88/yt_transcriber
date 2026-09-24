@@ -20,15 +20,30 @@ interface YtPlayerRt {
   playVideo?: () => void;
   pauseVideo?: () => void;
   mute?: () => void;
+  unMute?: () => void;
+  isMuted?: () => boolean;
   seekTo?: (s: number, a?: boolean) => void;
   getCurrentTime?: () => number;
   getDuration?: () => number;
 }
 
+/**
+ * Captured once at the start of an acquisition run. Retries must NOT overwrite
+ * this — otherwise the "original" state becomes whatever the previous attempt
+ * left behind.
+ */
 interface SavedPlaybackState {
+  player: YtPlayerRt;
+  videoId: string | null;
   hadCaptions: boolean;
   prevTrack: unknown;
   wasPaused: boolean;
+  wasMuted: boolean;
+  timeSeconds: number;
+  /** True if ensurePlaying sought away from the user's position. */
+  didSeek: boolean;
+  /** True if ensurePlaying muted a previously unmuted player. */
+  didMute: boolean;
 }
 
 let activeNonce: string | null = null;
@@ -73,7 +88,13 @@ function currentCaptionTrack(player: YtPlayerRt): {
       !!prev &&
       typeof prev === "object" &&
       typeof (prev as { languageCode?: unknown }).languageCode === "string";
-    return { hadCaptions: has, prevTrack: prev ?? null };
+    const pressed = document
+      .querySelector?.(".ytp-subtitles-button")
+      ?.getAttribute("aria-pressed");
+    return {
+      hadCaptions: pressed === "true" ? true : pressed === "false" ? false : has,
+      prevTrack: prev ?? null,
+    };
   } catch {
     return { hadCaptions: false, prevTrack: null };
   }
@@ -91,6 +112,35 @@ async function waitFor(
   return pred();
 }
 
+function captureOriginalState(player: YtPlayerRt): void {
+  // Only the first mutation in a run may snapshot — retries must preserve it.
+  if (savedState?.player !== player) savedState = null;
+  if (savedState) return;
+  const st = currentCaptionTrack(player);
+  let wasMuted = false;
+  try {
+    wasMuted = player.isMuted?.() === true;
+  } catch {
+    wasMuted = false;
+  }
+  savedState = {
+    player,
+    videoId: playerVideoId(player),
+    ...st,
+    wasPaused: player.getPlayerState?.() !== 1,
+    wasMuted,
+    timeSeconds: player.getCurrentTime?.() ?? 0,
+    didSeek: false,
+    didMute: false,
+  };
+}
+
+function playerVideoId(player: YtPlayerRt): string | null {
+  const response = player.getPlayerResponse?.() as
+    { videoDetails?: { videoId?: string } } | undefined;
+  return response?.videoDetails?.videoId ?? null;
+}
+
 async function handleEnableTrack(
   req: BridgeRequest,
   player: YtPlayerRt,
@@ -103,14 +153,19 @@ async function handleEnableTrack(
     languageCode?: string;
     kind?: string;
     vssId?: string;
+    forceReload?: boolean;
   };
   if (typeof p.languageCode !== "string" || !p.languageCode) {
     respond(req, false, undefined, "bad-track-payload");
     return;
   }
   try {
-    const st = currentCaptionTrack(player);
-    savedState = { ...st, wasPaused: player.getPlayerState?.() !== 1 };
+    captureOriginalState(player);
+    if (p.forceReload) {
+      player.setOption("captions", "track", {});
+      player.unloadModule?.("captions");
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
     player.loadModule?.("captions");
     const track: Record<string, string> = { languageCode: p.languageCode };
     if (p.kind) track["kind"] = p.kind;
@@ -126,19 +181,70 @@ async function handleRestore(
   req: BridgeRequest,
   player: YtPlayerRt | null,
 ): Promise<void> {
+  const prev = savedState;
+  savedState = null;
   try {
-    if (player?.setOption) {
-      const prev = savedState;
-      if (prev?.hadCaptions && prev.prevTrack) {
-        player.loadModule?.("captions");
-        player.setOption("captions", "track", prev.prevTrack);
-      } else {
-        player.setOption("captions", "track", {});
-        player.unloadModule?.("captions");
+    if (
+      player &&
+      prev &&
+      prev.player === player &&
+      prev.videoId === playerVideoId(player)
+    ) {
+      if (player.setOption) {
+        if (prev?.hadCaptions && prev.prevTrack) {
+          player.loadModule?.("captions");
+          player.setOption("captions", "track", prev.prevTrack);
+        } else {
+          player.setOption("captions", "track", {});
+          player.unloadModule?.("captions");
+        }
+        // The selected track and the visible CC toggle are separate state in
+        // YouTube. Let the player settle, then restore the toggle explicitly.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        const button = document.querySelector?.(
+          ".ytp-subtitles-button",
+        ) as HTMLButtonElement | null | undefined;
+        if (button) {
+          for (let attempt = 0; attempt < 3; attempt++) {
+            const pressed = button.getAttribute("aria-pressed") === "true";
+            if (pressed === prev.hadCaptions) break;
+            button.click();
+            await new Promise((resolve) => setTimeout(resolve, 250));
+          }
+          if (prev.hadCaptions && prev.prevTrack) {
+            player.setOption("captions", "track", prev.prevTrack);
+          }
+        }
+      }
+      // Undo mute only when we muted a previously unmuted player.
+      if (prev?.didMute && !prev.wasMuted) {
+        try {
+          player.unMute?.();
+        } catch {
+          /* ignore */
+        }
+      }
+      // Undo seek so the user is not left at the nudge position.
+      if (prev?.didSeek && Number.isFinite(prev.timeSeconds)) {
+        try {
+          player.seekTo?.(prev.timeSeconds, true);
+          const reached = await waitFor(
+            () => Math.abs((player.getCurrentTime?.() ?? prev.timeSeconds) - prev.timeSeconds) < 1.5,
+            1200,
+          );
+          if (!reached) {
+            const media = document.querySelector?.(
+              "video.html5-main-video",
+            ) as HTMLVideoElement | null | undefined;
+            if (media) media.currentTime = prev.timeSeconds;
+            player.seekTo?.(prev.timeSeconds, true);
+          }
+        } catch {
+          /* ignore */
+        }
       }
       if (prev?.wasPaused) player.pauseVideo?.();
     }
-    savedState = null;
     respond(req, true);
   } catch (e) {
     respond(req, false, undefined, String(e));
@@ -150,11 +256,25 @@ async function handleEnsurePlaying(
   player: YtPlayerRt,
 ): Promise<void> {
   try {
-    player.mute?.();
+    captureOriginalState(player);
+    const prev = savedState;
+    if (prev && !prev.wasMuted) {
+      player.mute?.();
+      prev.didMute = true;
+    } else {
+      player.mute?.();
+    }
     const t = player.getCurrentTime?.() ?? 0;
     const d = player.getDuration?.() ?? Infinity;
-    if (t < 0.5 || t >= d - 0.5)
-      player.seekTo?.(Math.min(2, Math.max(0, d / 10)), true);
+    const forceNudge = (req.payload as { forceNudge?: unknown } | undefined)
+      ?.forceNudge === true;
+    if (forceNudge || t < 0.5 || t >= d - 0.5) {
+      const target = forceNudge && t < d - 6
+        ? t + 5
+        : Math.min(2, Math.max(0, d / 10));
+      player.seekTo?.(target, true);
+      if (prev) prev.didSeek = true;
+    }
     player.playVideo?.();
     const playing = await waitFor(() => player.getPlayerState?.() === 1, 8000);
     respond(

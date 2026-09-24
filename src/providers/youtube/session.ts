@@ -160,6 +160,13 @@ export function startYouTubeSession(): void {
           tracks: [],
           metadata: null,
         };
+      if (snapshot.videoId !== videoId)
+        return {
+          videoId,
+          availability: "unsupported-page-structure",
+          tracks: [],
+          metadata: null,
+        };
       return {
         videoId,
         availability: mapSnapshotToAvailability(snapshot),

@@ -1,12 +1,19 @@
 // AI tab: provider config, key management, consent, pipelines, Q&A.
-// Privacy rules per plan: consent before first send, explicit user action
-// per run, API key input is type=password with autocomplete=off.
+// Privacy rules: consent before first send, explicit user action per run,
+// API key input is type=password with autocomplete=off.
+//
+// Long AI requests run IN THE PANEL (trusted extension page), not the
+// background service worker — Chrome may kill a SW when first-byte latency
+// exceeds ~30s (common for local models / long summaries).
 
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
 import { usePanelStore } from "../store.js";
 import { bus } from "../../platform/messaging.js";
-import type { AiPipeline, AiRunRequest, AiRunResult } from "../../ai/types.js";
+import { ensureWebsiteContentConsent } from "../../platform/permissions.js";
+import { AI_PROVIDERS } from "../../ai/registry.js";
+import { runAi, testAi } from "../../ai/runner.js";
+import type { AiPipeline, AiRunRequest } from "../../ai/types.js";
 import type { MessageKey } from "../../core/i18n.js";
 
 interface ProviderInfo {
@@ -18,7 +25,7 @@ interface ProviderInfo {
   originPattern: string;
 }
 
-/** Map background error codes onto user-facing, localized messages. */
+/** Map error codes onto user-facing, localized messages. */
 const AI_ERROR_KEYS: Record<string, MessageKey> = {
   AI_AUTH: "ai.error.auth",
   AI_NO_KEY: "ai.error.auth",
@@ -37,9 +44,20 @@ const AI_ERROR_KEYS: Record<string, MessageKey> = {
 
 type Status = { tone: "info" | "error"; text: string } | null;
 
+function listProviders(): ProviderInfo[] {
+  return AI_PROVIDERS.map((p) => ({
+    id: p.id,
+    label: p.label,
+    defaultModel: p.defaultModel,
+    requiresKey: p.requiresKey,
+    isLocal: p.isLocal,
+    originPattern: p.originPattern,
+  }));
+}
+
 export function AiView() {
   const s = usePanelStore();
-  const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [providers] = useState<ProviderInfo[]>(() => listProviders());
   const [providerId, setProviderId] = useState(s.settings.aiProvider);
   const [model, setModel] = useState(s.settings.aiModel);
   const [apiKey, setApiKey] = useState("");
@@ -53,11 +71,14 @@ export function AiView() {
   const [status, setStatus] = useState<Status>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
   const pendingPipeline = useRef<AiPipeline | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
 
   const provider = providers.find((p) => p.id === providerId) ?? null;
 
   useEffect(() => {
-    void bus.request<ProviderInfo[]>("ai.providers").then(setProviders);
+    return () => {
+      abortRef.current?.abort();
+    };
   }, []);
 
   useEffect(() => {
@@ -75,6 +96,7 @@ export function AiView() {
   const ensurePermission = async (): Promise<boolean> => {
     if (!provider?.originPattern) return false;
     try {
+      if (!(await ensureWebsiteContentConsent())) return false;
       const already = await browser.permissions.contains({
         origins: [provider.originPattern],
       });
@@ -108,10 +130,7 @@ export function AiView() {
         setStatus({ tone: "error", text: s.tr("ai.error.cors") });
         return;
       }
-      const r = await bus.request<AiRunResult>("ai.test", {
-        providerId: provider.id,
-        model,
-      });
+      const r = await testAi(provider.id, model);
       setStatus(
         r.ok
           ? { tone: "info", text: s.tr("ai.test.success") }
@@ -124,10 +143,17 @@ export function AiView() {
 
   const runPipeline = async (pipeline: AiPipeline, consent = false) => {
     if (!provider || !s.transcript || busy) return;
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
     setBusy(true);
     setStatus(null);
     setNeedsConsent(false);
     try {
+      if (!(await ensurePermission())) {
+        setStatus({ tone: "error", text: s.tr("ai.error.cors") });
+        return;
+      }
       const request: AiRunRequest = {
         pipeline,
         transcript: s.transcript,
@@ -135,7 +161,7 @@ export function AiView() {
         model,
         ...(pipeline === "qa" ? { question } : {}),
       };
-      const r = await bus.request<AiRunResult>("ai.run", { request, consent });
+      const r = await runAi(request, consent, controller.signal);
       if (r.ok) {
         setResult({
           text: r.text ?? "",
@@ -262,6 +288,18 @@ export function AiView() {
         </div>
       )}
 
+      {!provider?.requiresKey && provider && (
+        <div className="toolbar">
+          <button
+            className="btn"
+            onClick={() => void testConnection()}
+            disabled={busy}
+          >
+            {s.tr("ai.test")}
+          </button>
+        </div>
+      )}
+
       <div className="settings-row">
         <div className="hint">{s.tr("ai.setup.description")}</div>
       </div>
@@ -294,6 +332,19 @@ export function AiView() {
             {s.tr(p.key)}
           </button>
         ))}
+        {busy && (
+          <button
+            className="btn"
+            type="button"
+            onClick={() => {
+              abortRef.current?.abort();
+              setBusy(false);
+              setStatus({ tone: "info", text: s.tr("ai.error.cancelled") });
+            }}
+          >
+            {s.tr("general.cancel")}
+          </button>
+        )}
       </div>
 
       <div className="toolbar">
@@ -305,6 +356,7 @@ export function AiView() {
           onKeyDown={(e) => {
             if (e.key === "Enter" && question.trim()) void runPipeline("qa");
           }}
+          aria-label={s.tr("ai.qa.placeholder")}
         />
         <button
           className="btn"
@@ -316,7 +368,7 @@ export function AiView() {
       </div>
 
       {busy && (
-        <div className="banner">
+        <div className="banner" role="status" aria-live="polite">
           <span className="spinner" />
           {s.tr("ai.generating")}
         </div>
@@ -325,6 +377,7 @@ export function AiView() {
       {status && (
         <div
           className="banner"
+          role="status"
           data-tone={status.tone === "error" ? "error" : undefined}
         >
           {status.text}

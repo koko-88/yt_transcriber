@@ -14,19 +14,27 @@ export function classifySender(sender: MessageSender): SenderClass {
   const isSelf = sender.id === browser.runtime.id;
   if (!isSelf) return "untrusted";
 
-  if (sender.tab) {
-    const url = new URL(sender.url);
-    if (url.hostname === "www.youtube.com") {
-      return "content-script";
-    }
-    return "untrusted";
-  }
-
+  // Extension pages (side panel, options) — including when opened as a normal
+  // tab (Playwright E2E, "Open in tab", some Firefox sidebar contexts). Check
+  // BEFORE sender.tab: Chrome sets tab for extension documents navigated as
+  // tabs, which previously misclassified them as untrusted.
   if (
     sender.url.startsWith("chrome-extension://") ||
     sender.url.startsWith("moz-extension://")
   ) {
     return "extension-page";
+  }
+
+  if (sender.tab) {
+    try {
+      const url = new URL(sender.url);
+      if (url.hostname === "www.youtube.com") {
+        return "content-script";
+      }
+    } catch {
+      return "untrusted";
+    }
+    return "untrusted";
   }
 
   return "untrusted";

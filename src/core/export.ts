@@ -109,7 +109,14 @@ export function exportVtt(segments: readonly TranscriptSegment[]): string {
 
 /** Export as JSON (the full transcript object) */
 export function exportJson(transcript: Transcript): string {
-  return JSON.stringify(transcript, null, 2);
+  return JSON.stringify(
+    {
+      ...transcript,
+      track: { ...transcript.track, sourceRef: undefined },
+    },
+    null,
+    2,
+  );
 }
 
 /** Generate a safe filename for export */

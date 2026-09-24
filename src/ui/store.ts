@@ -77,6 +77,9 @@ function resolveLocale(setting: AppSettings["locale"]): Locale {
 }
 
 let followTimer: ReturnType<typeof setInterval> | null = null;
+let pageEpoch = 0;
+let acquireEpoch = 0;
+let refreshRetryCount = 0;
 
 function startPlaybackPolling(
   get: () => PanelState,
@@ -121,11 +124,21 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   savedVideoIds: new Set(),
 
   async init() {
-    const settings = await bus.request<AppSettings>("settings.get");
-    const locale = resolveLocale(settings.locale);
-    set({ settings, locale });
-    document.documentElement.lang = locale;
-    document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
+    try {
+      const settings = await bus.request<AppSettings>("settings.get");
+      const locale = resolveLocale(settings.locale);
+      set({ settings, locale });
+      document.documentElement.lang = locale;
+      document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
+    } catch (e) {
+      logger.warn("panel", "settings.get failed; using defaults", {
+        error: String(e),
+      });
+      const locale = resolveLocale(DEFAULT_SETTINGS.locale);
+      set({ settings: DEFAULT_SETTINGS, locale });
+      document.documentElement.lang = locale;
+      document.documentElement.dir = locale === "ar" ? "rtl" : "ltr";
+    }
 
     await get().refreshPageState();
     await get().loadLibrary();
@@ -137,7 +150,17 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         payload?: { videoId?: string | null };
       };
       if (msg?.type === "panel.videoChanged") {
-        set({ transcript: null });
+        pageEpoch++;
+        acquireEpoch++;
+        refreshRetryCount = 0;
+        set({
+          videoId: msg.payload?.videoId ?? null,
+          transcript: null,
+          tracks: [],
+          metadata: null,
+          availability: "unsupported-page-structure",
+          loading: false,
+        });
         void get().refreshPageState();
       }
     });
@@ -154,6 +177,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       }
     });
 
+    // Always surface the shell UI even if background messaging failed — otherwise
+    // the panel stays on "Loading…" forever with no recovery path.
     set({ ready: true });
   },
 
@@ -172,8 +197,26 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
 
   async refreshPageState() {
+    const epoch = pageEpoch;
+    const retryTransientFailure = () => {
+      if (epoch !== pageEpoch || refreshRetryCount >= 8) return;
+      const delay = 400 * ++refreshRetryCount;
+      setTimeout(() => {
+        if (epoch === pageEpoch) void get().refreshPageState();
+      }, delay);
+    };
     try {
       const state = await bus.request<VideoPageState>("acq.getState");
+      if (epoch !== pageEpoch) return;
+      if (get().videoId && state.videoId !== get().videoId) {
+        retryTransientFailure();
+        return;
+      }
+      if (state.availability === "unsupported-page-structure") {
+        retryTransientFailure();
+      } else {
+        refreshRetryCount = 0;
+      }
       set({
         videoId: state.videoId,
         availability: state.availability,
@@ -197,12 +240,15 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         tracks: [],
         metadata: null,
       });
+      retryTransientFailure();
     }
   },
 
   async acquire(trackId) {
-    if (get().loading) return;
-    set({ loading: true });
+    const expectedVideoId = get().videoId;
+    if (!expectedVideoId) return;
+    const epoch = ++acquireEpoch;
+    set({ loading: true, transcript: null });
     try {
       const raw = await bus.request<unknown>(
         "acq.acquire",
@@ -211,7 +257,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       const parsed = AcquisitionResultSchema.safeParse(raw);
       if (!parsed.success) throw new Error("malformed acquisition result");
       const result: AcquisitionResult = parsed.data;
+      if (epoch !== acquireEpoch || get().videoId !== expectedVideoId) return;
       if (result.ok) {
+        if (result.transcript.video.videoId !== expectedVideoId) return;
         set({
           transcript: result.transcript,
           tracks: [...result.tracks],
@@ -221,10 +269,11 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         set({ availability: result.reason, transcript: null });
       }
     } catch (e) {
+      if (epoch !== acquireEpoch || get().videoId !== expectedVideoId) return;
       logger.error("panel", "acquire failed", { error: String(e) });
       set({ availability: "unknown", transcript: null });
     } finally {
-      set({ loading: false });
+      if (epoch === acquireEpoch) set({ loading: false });
     }
   },
 
@@ -249,8 +298,13 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
 
   async loadLibrary() {
-    const recents = await bus.request<LibraryItem[]>("library.list");
-    set({ recents, savedVideoIds: new Set(recents.map((r) => r.videoId)) });
+    try {
+      const recents = await bus.request<LibraryItem[]>("library.list");
+      set({ recents, savedVideoIds: new Set(recents.map((r) => r.videoId)) });
+    } catch (e) {
+      logger.warn("panel", "library.list failed", { error: String(e) });
+      set({ recents: [], savedVideoIds: new Set() });
+    }
   },
 
   async openSaved(transcriptId) {

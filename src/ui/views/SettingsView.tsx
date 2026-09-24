@@ -1,12 +1,58 @@
-// Settings tab: theme, language, strict local mode, diagnostics.
+// Settings tab: theme, language, strict local mode, backup, diagnostics.
 
 import { usePanelStore } from "../store.js";
 import { logger } from "../../core/logger.js";
-import { useState } from "react";
+import { bus } from "../../platform/messaging.js";
+import { useRef, useState } from "react";
+import type { LibraryBackup } from "../../storage/backup.js";
 
 export function SettingsView() {
   const s = usePanelStore();
   const [copied, setCopied] = useState(false);
+  const [backupStatus, setBackupStatus] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const exportBackup = async () => {
+    setBackupStatus(null);
+    try {
+      const data = await bus.request<LibraryBackup>("library.backup.export");
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `transcript-workbench-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setBackupStatus(s.tr("general.success"));
+    } catch {
+      setBackupStatus(s.tr("general.error"));
+    }
+  };
+
+  const importBackup = async (file: File) => {
+    setBackupStatus(null);
+    try {
+      const text = await file.text();
+      if (text.length > 50 * 1024 * 1024) {
+        setBackupStatus(s.tr("general.error"));
+        return;
+      }
+      const raw = JSON.parse(text) as unknown;
+      const result = await bus.request<{
+        imported: number;
+        notes: number;
+        highlights: number;
+      }>("library.backup.import", { data: raw });
+      await s.loadLibrary();
+      setBackupStatus(
+        `${s.tr("general.success")} (${result.imported} transcripts)`,
+      );
+    } catch {
+      setBackupStatus(s.tr("general.error"));
+    }
+  };
 
   return (
     <div className="view">
@@ -61,6 +107,46 @@ export function SettingsView() {
           />{" "}
           {s.tr("settings.strictMode")}
         </label>
+      </div>
+
+      <div className="settings-row">
+        <label>{s.tr("settings.backup")}</label>
+        <div className="hint">
+          Exports saved transcripts, notes and highlights. API keys are never
+          included.
+        </div>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => void exportBackup()}
+          >
+            {s.tr("library.export")}
+          </button>
+          <button
+            className="btn"
+            type="button"
+            onClick={() => fileRef.current?.click()}
+          >
+            {s.tr("library.import")}
+          </button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (f) void importBackup(f);
+            }}
+          />
+        </div>
+        {backupStatus && (
+          <div className="hint" role="status">
+            {backupStatus}
+          </div>
+        )}
       </div>
 
       <div className="settings-row">

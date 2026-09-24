@@ -23,21 +23,61 @@ import {
 } from "../storage/recents.js";
 import { TranscriptSchema } from "../core/schemas.js";
 import type { Transcript } from "../core/model.js";
+import {
+  exportLibraryBackup,
+  importLibraryBackup,
+  sanitizeBackupJson,
+  MAX_BACKUP_BYTES,
+} from "../storage/backup.js";
+import {
+  listNotesForVideo,
+  upsertNote,
+  deleteNote,
+  listHighlightsForVideo,
+  upsertHighlight,
+  deleteHighlight,
+} from "../storage/notes.js";
 import { AI_PROVIDERS } from "../ai/registry.js";
 import { runAi, testAi } from "../ai/runner.js";
 import type { AiRunRequest } from "../ai/types.js";
 import { setSecret, deleteSecret, getSecret } from "../storage/secrets.js";
+import { videoIdFromUrl } from "../providers/youtube/session.js";
 
-/** Resolve the tab a panel request should act on: the sender's tab, else the active tab. */
+/** True when a tab URL is a YouTube watch/shorts page we can acquire from. */
+function isYoutubeVideoTab(url: string | undefined): boolean {
+  return url != null && videoIdFromUrl(url) != null;
+}
+
+/**
+ * Resolve the YouTube tab a panel request should act on.
+ * Never use the extension-page sender tab — when the panel is opened as a
+ * normal tab (E2E, "Open in tab"), sender.tab is the panel itself.
+ */
 async function resolveTargetTabId(
-  senderTabId: number | undefined,
+  _senderTabId: number | undefined,
 ): Promise<number> {
-  if (senderTabId != null) return senderTabId;
-  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id) {
-    throw new AppError({ code: "ACQ_NO_PLAYER", message: "no active tab" });
+  const [active] = await browser.tabs.query({
+    active: true,
+    currentWindow: true,
+  });
+  if (active?.id != null && isYoutubeVideoTab(active.url)) {
+    return active.id;
   }
-  return tab.id;
+
+  const candidates = await browser.tabs.query({
+    url: ["https://www.youtube.com/watch*", "https://www.youtube.com/shorts/*"],
+  });
+  const current = await browser.windows.getCurrent().catch(() => null);
+  const sameWindow = current
+    ? candidates.filter((t) => t.windowId === current.id)
+    : [];
+  const pick = sameWindow[0] ?? candidates[0];
+  if (pick?.id != null) return pick.id;
+
+  throw new AppError({
+    code: "ACQ_NO_PLAYER",
+    message: "no youtube video tab open",
+  });
 }
 
 async function forwardToContent<T>(
@@ -50,6 +90,14 @@ async function forwardToContent<T>(
 }
 
 export default defineBackground(() => {
+  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
+    if (!change.url || !tab.active) return;
+    const videoId = videoIdFromUrl(change.url);
+    if (!videoId) return;
+    browser.runtime
+      .sendMessage({ type: "panel.videoChanged", payload: { videoId } })
+      .catch(() => undefined);
+  });
   // Open the panel on toolbar click and on the keyboard shortcut.
   browser.action.onClicked.addListener((tab) => {
     openSidePanel(tab.id, tab.windowId).catch((e) =>
@@ -156,6 +204,95 @@ export function registerStorageHandlers(): void {
     ["extension-page"],
     async (p) => {
       return (await getTranscript(p.id)) ?? null;
+    },
+  );
+
+  bus.on("library.backup.export", z.object({}), ["extension-page"], async () =>
+    exportLibraryBackup(),
+  );
+
+  bus.on(
+    "library.backup.import",
+    z.object({ data: z.unknown() }),
+    ["extension-page"],
+    async (p) => {
+      const json = JSON.stringify(p.data);
+      if (json.length > MAX_BACKUP_BYTES) {
+        throw new AppError({
+          code: "INVALID_INPUT",
+          message: "Backup file too large",
+        });
+      }
+      return importLibraryBackup(sanitizeBackupJson(p.data));
+    },
+  );
+
+  bus.on(
+    "notes.list",
+    z.object({ videoId: z.string() }),
+    ["extension-page"],
+    async (p) => listNotesForVideo(p.videoId),
+  );
+
+  bus.on(
+    "notes.upsert",
+    z.object({
+      id: z.string(),
+      videoId: z.string(),
+      transcriptId: z.string(),
+      text: z.string().max(50_000),
+      startMs: z.number().int().nonnegative().optional(),
+    }),
+    ["extension-page"],
+    async (p) =>
+      upsertNote({
+        id: p.id,
+        videoId: p.videoId,
+        transcriptId: p.transcriptId,
+        text: p.text,
+        ...(p.startMs != null ? { startMs: p.startMs } : {}),
+      }),
+  );
+
+  bus.on(
+    "notes.delete",
+    z.object({ id: z.string() }),
+    ["extension-page"],
+    async (p) => {
+      await deleteNote(p.id);
+      return { ok: true };
+    },
+  );
+
+  bus.on(
+    "highlights.list",
+    z.object({ videoId: z.string() }),
+    ["extension-page"],
+    async (p) => listHighlightsForVideo(p.videoId),
+  );
+
+  bus.on(
+    "highlights.upsert",
+    z.object({
+      id: z.string(),
+      videoId: z.string(),
+      transcriptId: z.string(),
+      startMs: z.number().int().nonnegative(),
+      endMs: z.number().int().nonnegative(),
+      color: z.string().max(40),
+      createdAt: z.number(),
+    }),
+    ["extension-page"],
+    async (p) => upsertHighlight(p),
+  );
+
+  bus.on(
+    "highlights.delete",
+    z.object({ id: z.string() }),
+    ["extension-page"],
+    async (p) => {
+      await deleteHighlight(p.id);
+      return { ok: true };
     },
   );
 }

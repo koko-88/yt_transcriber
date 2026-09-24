@@ -11,6 +11,8 @@ export interface Note {
   videoId: string;
   transcriptId: string;
   text: string;
+  /** Optional timestamp link into the transcript. */
+  startMs?: number;
   createdAt: number;
   updatedAt: number;
 }

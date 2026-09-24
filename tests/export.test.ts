@@ -113,3 +113,80 @@ describe("makeYouTubeTimestampUrl", () => {
     );
   });
 });
+
+describe("large multilingual transcript exports", () => {
+  it("keeps every timed cue and Unicode text across TXT, MD, JSON, SRT and VTT", () => {
+    const samples = [
+      "العربية، أهلاً",
+      "English — hello 👋",
+      "混合 نص text",
+      "Élève déjà vu",
+    ];
+    const longCue = "نص طويل 👩🏽‍💻 — ".repeat(800);
+    const many: TranscriptSegment[] = Array.from(
+      { length: 10_000 },
+      (_, index) => ({
+        index,
+        startMs: index * 900,
+        endMs: index * 900 + 800,
+        text: index === 5000 ? longCue : samples[index % samples.length]!,
+      }),
+    );
+    const data: Transcript = {
+      id: "youtube:abcdefghijk:ar~manual",
+      schemaVersion: 1,
+      video: {
+        provider: "youtube",
+        videoId: "abcdefghijk",
+        canonicalUrl: "https://www.youtube.com/watch?v=abcdefghijk",
+        title: "Long Arabic/English video",
+        channelName: "Channel",
+        durationMs: 9_000_000,
+        liveState: "none",
+        capturedAt: 1,
+      },
+      track: {
+        trackId: "ar~manual",
+        languageCode: "ar",
+        languageLabel: "العربية",
+        kind: "manual",
+        isDefaultForVideo: true,
+        sourceRef: { secret: "never-export" },
+      },
+      segments: many,
+      source: {
+        method: "yt-static-url",
+        format: "json3",
+        completeness: {
+          status: "complete",
+          firstCueMs: 0,
+          lastCueEndMs: many.at(-1)!.endMs,
+          videoDurationMs: 9_000_000,
+        },
+      },
+      acquiredAt: 2,
+      textHash: "hash",
+    };
+    const txt = exportTxt(data);
+    const md = exportMarkdown(data);
+    const srt = exportSrt(many);
+    const vtt = exportVtt(many);
+    const json = exportJson(data);
+    expect(txt).toContain(longCue);
+    expect(md).toContain(longCue);
+    expect(md).toContain("https://www.youtube.com/watch?v=abcdefghijk&t=0s");
+    expect(srt.match(/^\d+\n/gm)).toHaveLength(10_000);
+    expect(vtt.match(/ --> /g)).toHaveLength(10_000);
+    for (const sample of samples) {
+      expect(txt).toContain(sample);
+      expect(srt).toContain(sample);
+      expect(vtt).toContain(sample);
+    }
+    const parsed = JSON.parse(json);
+    expect(parsed.segments).toEqual(many);
+    expect(parsed.video.channelName).toBe("Channel");
+    expect(parsed.source.completeness.lastCueEndMs).toBe(many.at(-1)!.endMs);
+    expect(json).not.toContain("never-export");
+    expect(copyWithTimestamps(many)).toContain("[2:29:59]");
+  });
+});

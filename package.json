@@ -9,6 +9,7 @@
     "npm": ">=11.0.0"
   },
   "scripts": {
+    "prepare": "wxt prepare",
     "dev": "wxt",
     "dev:firefox": "wxt --browser firefox",
     "build": "wxt build",
@@ -17,7 +18,7 @@
     "zip": "wxt zip",
     "zip:firefox": "wxt zip --browser firefox",
     "zip:all": "npm run zip && npm run zip:firefox && npm run build:sources",
-    "postbuild": "npm run check:manifest",
+    "postbuild": "node scripts/check-manifest.mjs chrome",
     "compile": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "lint:fix": "eslint . --fix",
@@ -32,7 +33,7 @@
     "check:licenses": "node scripts/check-licenses.mjs",
     "checksums": "node scripts/checksums.mjs",
     "web-ext:lint": "web-ext lint --source-dir .output/firefox-mv2",
-    "verify": "npm run compile && npm run lint && npm run format:check && npm run test && npm run build && npm run build:firefox && npm run check:bundle && npm run check:licenses",
+    "verify": "npm run compile && npm run lint && npm run format:check && npm run test && npm run build && npm run build:firefox && npm run check:manifest && npm run check:bundle && npm run check:licenses",
     "submit": "wxt submit",
     "submit:dry": "wxt submit --dry-run",
     "build-for-amo": "npm ci && npm run build:firefox"
@@ -46,6 +47,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.29.0",
     "@playwright/test": "^1.52.0",
     "@types/react": "^19.1.0",

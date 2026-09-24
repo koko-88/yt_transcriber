@@ -23,14 +23,16 @@ for the threat model, and [PRIVACY.md](PRIVACY.md) for exactly what is stored.
 | Transcript | Paragraph or raw segment view, timestamps, follow-along with playback, click-to-seek           |
 | Search     | Diacritic- and Arabic-aware search with in-place highlighting                                  |
 | Tracks     | Manual, auto-generated (ASR) and translated tracks; switch without leaving the panel           |
+| Notes      | Timestamp-linked notes; Alt+click a segment to highlight it                                    |
 | Export     | TXT, Markdown (with timestamp links), SRT, VTT, JSON, plus copy-as-text / copy-with-timestamps |
-| Library    | Save transcripts, recents list, remove; everything stored locally                              |
-| AI         | Summary, key takeaways, chapter suggestions, and grounded Q&A against the transcript           |
+| Library    | Save transcripts, searchable recents, remove; backup export/import (never includes API keys)   |
+| AI         | Summary, key takeaways, chapter suggestions, and grounded Q&A with citation validation         |
 
 ## Requirements
 
 - Node.js **>= 24** and npm **>= 11** for development.
-- Chrome/Edge/Brave **128+** (Side Panel API) or Firefox **140+** (MV2 sidebar).
+- Chrome/Edge/Brave **128+** (Side Panel API) or Firefox **142+** (MV2 sidebar;
+  built-in data-collection consent).
 
 ## Install for development
 
@@ -89,10 +91,18 @@ access is needed for the test suite.
 - Live streams in progress and premieres are not supported (`live-in-progress`,
   `upcoming`).
 - Transcript acquisition requires the player to be able to play the video
-  briefly: the panel mutes the player, seeks if needed, captures the caption
-  request YouTube itself makes, then restores your previous caption and pause
-  state. If playback is blocked, the panel reports `needs-player-interaction`
-  and you can retry.
+  briefly only if the session caption URL does not work while paused. The panel
+  captures one caption resource, then restores the previous caption, mute,
+  position and pause state. It does not record captions as the video plays.
+  Clearly truncated responses are reported as partial and retried through the
+  other acquisition method. If playback is blocked, the panel reports
+  `needs-player-interaction` and you can retry.
+- Videos with no YouTube caption track report `no-captions`. Audio transcription
+  is a separate future capability: it would need a consented way to obtain
+  audio and a local or user-configured speech model. This release does not
+  upload video or audio to a service for transcription.
+- YouTube translated caption options are not advertised as tracks until they
+  can be retrieved and verified as full, distinct tracks in the current session.
 - Members-only, age-restricted or sign-in-gated videos surface the matching
   state instead of a transcript.
 - Shorts URLs are handled, but YouTube itself redirects them to `/watch`.

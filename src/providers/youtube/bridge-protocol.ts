@@ -90,6 +90,7 @@ export const EnableTrackPayloadSchema = z.object({
   languageCode: z.string().min(1).max(20),
   kind: z.string().max(20).optional(),
   vssId: z.string().max(100).optional(),
+  forceReload: z.boolean().optional(),
 });
 
 export function isBridgeMessage(

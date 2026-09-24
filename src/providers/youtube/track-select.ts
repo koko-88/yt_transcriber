@@ -8,6 +8,7 @@ export interface TrackEntry {
   track: TranscriptTrack;
   /** baseUrl from the static player response, if present (session-only). */
   baseUrl?: string | undefined;
+  vssId?: string | undefined;
 }
 
 function toKind(kind: string | undefined): TrackKind {
@@ -24,7 +25,15 @@ export function buildTrackEntries(
   const entries: TrackEntry[] = [];
   for (const t of bridgeTracks) {
     const kind = toKind(t.kind);
-    let trackId = `${t.languageCode}~${kind}`;
+    let identity = t.vssId;
+    if (!identity && t.baseUrl) {
+      try {
+        identity = new URL(t.baseUrl).searchParams.get("name") ?? undefined;
+      } catch {
+        /* the base URL will be rejected by acquisition */
+      }
+    }
+    let trackId = `${t.languageCode}~${kind}${identity ? `~${identity}` : ""}`;
     let n = 2;
     while (seen.has(trackId)) {
       trackId = `${t.languageCode}~${kind}~${n}`;
@@ -41,6 +50,7 @@ export function buildTrackEntries(
       },
     };
     if (t.baseUrl) entry.baseUrl = t.baseUrl;
+    if (t.vssId) entry.vssId = t.vssId;
     entries.push(entry);
   }
   return entries;

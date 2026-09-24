@@ -53,6 +53,102 @@ function normalizedTexts(segments: readonly TranscriptSegment[]): string[] {
 }
 
 /**
+ * Find highlight ranges in the *original* text for a query, using the same
+ * normalization rules as search. Positions map to the original string so the
+ * UI can wrap exact substrings without false matches from diacritics.
+ */
+export function findHighlightRanges(
+  text: string,
+  query: string,
+): { start: number; end: number }[] {
+  const normalizedQuery = normalizeForSearch(query);
+  if (!normalizedQuery) return [];
+
+  const map = alignNormalized(text);
+  if (!map.normalized.includes(normalizedQuery)) return [];
+
+  const ranges: { start: number; end: number }[] = [];
+  let from = 0;
+  while (from <= map.normalized.length - normalizedQuery.length) {
+    const idx = map.normalized.indexOf(normalizedQuery, from);
+    if (idx === -1) break;
+    const startOrig = map.toOriginal[idx];
+    const endOrig = map.toOriginal[idx + normalizedQuery.length - 1];
+    if (startOrig != null && endOrig != null) {
+      ranges.push({ start: startOrig, end: endOrig + 1 });
+    }
+    from = idx + 1;
+  }
+  return ranges;
+}
+
+interface NormMap {
+  normalized: string;
+  toOriginal: number[];
+}
+
+function alignNormalized(text: string): NormMap {
+  // Produce the same string as normalizeForSearch, with per-char original indices.
+  // Strategy: walk NFKD-normalized form while tracking source offsets.
+  const nfkd = text.normalize("NFKD");
+  // Map each NFKD index back to original by expanding originals similarly.
+  const origNfkdStarts: number[] = [];
+  {
+    let o = 0;
+    for (let i = 0; i < text.length; i++) {
+      const expanded = text[i]!.normalize("NFKD");
+      for (let k = 0; k < expanded.length; k++) origNfkdStarts.push(i);
+      o += expanded.length;
+    }
+    void o;
+  }
+
+  let normalized = "";
+  const toOriginal: number[] = [];
+  let lastWasSpace = false;
+
+  for (let i = 0; i < nfkd.length; i++) {
+    let ch = nfkd[i]!;
+    const code = ch.charCodeAt(0);
+    // Skip combining marks (Latin) and Arabic diacritics.
+    if (code >= 0x0300 && code <= 0x036f) continue;
+    if (
+      (code >= 0x0610 && code <= 0x061a) ||
+      (code >= 0x064b && code <= 0x065f) ||
+      code === 0x0670 ||
+      (code >= 0x06d6 && code <= 0x06dc) ||
+      (code >= 0x06df && code <= 0x06e4) ||
+      code === 0x06e7 ||
+      code === 0x06e8 ||
+      (code >= 0x06ea && code <= 0x06ed)
+    )
+      continue;
+
+    // Alef variants → bare alef; taa marbuta → haa.
+    if (ch === "\u0622" || ch === "\u0623" || ch === "\u0625") ch = "\u0627";
+    if (ch === "\u0629") ch = "\u0647";
+    ch = ch.toLowerCase();
+
+    if (/\s/.test(ch)) {
+      if (lastWasSpace || normalized.length === 0) continue;
+      normalized += " ";
+      toOriginal.push(origNfkdStarts[i] ?? 0);
+      lastWasSpace = true;
+      continue;
+    }
+    lastWasSpace = false;
+    normalized += ch;
+    toOriginal.push(origNfkdStarts[i] ?? 0);
+  }
+  // Trim trailing space to match normalizeForSearch().trim()
+  while (normalized.endsWith(" ")) {
+    normalized = normalized.slice(0, -1);
+    toOriginal.pop();
+  }
+  return { normalized, toOriginal };
+}
+
+/**
  * Simple substring search with Arabic/diacritic normalization.
  * Returns segments that contain the query, with match ranges for highlighting.
  */
@@ -63,28 +159,10 @@ export function searchSegments(
   const normalizedQuery = normalizeForSearch(query);
   if (!normalizedQuery) return [];
 
-  const texts = normalizedTexts(segments);
   const results: SearchResult[] = [];
 
-  for (let i = 0; i < segments.length; i++) {
-    const segment = segments[i]!;
-    const normalizedText = texts[i]!;
-    const matchRanges: { start: number; end: number }[] = [];
-
-    let searchFrom = 0;
-    while (true) {
-      const idx = normalizedText.indexOf(normalizedQuery, searchFrom);
-      if (idx === -1) break;
-
-      // Map back to original text positions (approximate for diacritics)
-      const ratio = segment.text.length / normalizedText.length;
-      matchRanges.push({
-        start: Math.round(idx * ratio),
-        end: Math.round((idx + normalizedQuery.length) * ratio),
-      });
-      searchFrom = idx + 1;
-    }
-
+  for (const segment of segments) {
+    const matchRanges = findHighlightRanges(segment.text, query);
     if (matchRanges.length > 0) {
       results.push({ segment, matchRanges });
     }

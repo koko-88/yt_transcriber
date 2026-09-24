@@ -6,9 +6,10 @@
 // license compatible with distribution, and that THIRD_PARTY_NOTICES.md covers
 // all runtime dependencies.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const root = new URL("..", import.meta.url).pathname;
+const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 
 const ALLOWED = new Set([

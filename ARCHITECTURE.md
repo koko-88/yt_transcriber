@@ -23,13 +23,15 @@ zustand store.
 └────────────────────────────┬───────────────────────────────────────┘
                              │ runtime message bus (schema + sender class)
 ┌────────────────────────────▼───────────────────────────────────────┐
-│ Background service worker (most trusted)                           │
-│   bus handlers → storage/*, ai/runner → platform/network gatedFetch│
+│ Background service worker (trusted router)                         │
+│   bus handlers → storage/*, permission checks                      │
+│   (long AI network calls do NOT run here — see ADR-0002 §5)        │
 └────────────────────────────┬───────────────────────────────────────┘
                              │ runtime message bus
 ┌────────────────────────────▼───────────────────────────────────────┐
-│ Side panel (extension page, trusted, UI only)                      │
+│ Side panel (extension page, trusted)                               │
 │   ui/App + views + zustand store                                   │
+│   ai/runner executes provider fetches here (survives >30s TTFB)    │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,8 +41,9 @@ Rules that keep the boundaries honest:
   knowledge. It is the only place where transcript shapes are defined.
 - The MAIN-world bridge never constructs network requests and never sees
   secrets; it is treated as hostile input by the ISOLATED world.
-- The side panel never touches privileged APIs directly; it asks the background
-  over `bus.request(...)`.
+- The side panel never talks to the YouTube page directly; acquisition goes
+  through the background → content-script bus. Privileged storage and
+  secrets are accessed from trusted extension contexts only.
 - Every bus message has a zod payload schema and an explicit sender-class
   allow-list; misclassification is rejected before the handler runs.
 
@@ -71,14 +74,15 @@ failure rather than a blank transcript.
 
 ## Storage
 
-| Store                                               | Contents                                                                                       |
-| --------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `transcripts`                                       | Full transcripts (keyed by `youtube:<videoId>:<trackId>`)                                      |
-| `videos`                                            | Video metadata                                                                                 |
-| `recents`                                           | Library list, capped at 50 entries (oldest pruned)                                             |
-| `aiCache`                                           | AI results, capped at 200 entries (oldest pruned)                                              |
-| `secrets`                                           | Provider API keys (extension origin)                                                           |
-| `notes`, `highlights`, `tags`, `video_tags`, `meta` | Reserved for the notes/tags surface; created in the v1 schema so using them needs no migration |
+| Store                        | Contents                                                                             |
+| ---------------------------- | ------------------------------------------------------------------------------------ |
+| `transcripts`                | Full transcripts (keyed by `youtube:<videoId>:<trackId>`)                            |
+| `videos`                     | Video metadata                                                                       |
+| `recents`                    | Library list, capped at 50 entries (oldest pruned)                                   |
+| `aiCache`                    | AI results, capped at 200 entries (oldest pruned)                                    |
+| `secrets`                    | Provider API keys (extension origin)                                                 |
+| `notes`, `highlights`        | Timestamp-linked notes and segment highlights (V1)                                   |
+| `tags`, `video_tags`, `meta` | Reserved for tags surface; created in the v1 schema so using them needs no migration |
 
 `browser.storage.local` holds settings only, validated on read and on write.
 Database upgrades run through a versioned `upgrade()` callback; a blocked
@@ -90,11 +94,14 @@ upgrade closes the connection and reopens instead of corrupting state.
   key is required, whether it is local). Every remote provider maps to an
   optional host permission origin.
 - `pipelines.ts` — prompt construction with a versioned prompt
-  (`PROMPT_VERSION`) and a character budget; Q&A uses BM25 retrieval over
-  segments to stay inside the context window.
+  (`PROMPT_VERSION`) and a character budget; transcript lines are timestamp-
+  anchored; Q&A uses BM25 retrieval; `validateCitations` / `groundAiOutput`
+  strip invented timestamps so they are never presented as valid.
 - `runner.ts` — the order of checks is deliberate: strict mode → consent →
   host permission → secret → cache → rate limit → call. Failures map to the
-  typed `AI_*` error codes.
+  typed `AI_*` error codes. **Execution runs in the side panel**, not the
+  background service worker (Chrome may terminate a SW when first-byte
+  latency exceeds ~30s).
 
 ## Error handling
 

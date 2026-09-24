@@ -6,6 +6,7 @@ import type { Transcript, TranscriptTrack } from "./model";
 /** All possible availability/error states */
 export type Availability =
   | "available"
+  | "available-partial"
   | "no-captions"
   | "login-required"
   | "age-restricted"

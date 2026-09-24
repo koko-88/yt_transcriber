@@ -15,6 +15,7 @@ configured.
 | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------- |
 | Settings (theme, language, Strict Local Mode, chosen provider/model, consent timestamps) | `browser.storage.local`                                       | Remember your preferences                            | No                                                             |
 | Saved transcripts, video metadata, library list                                          | IndexedDB (`yt-transcript-workbench`) in the extension origin | Library, exports, AI context                         | No                                                             |
+| Notes and highlights                                                                     | IndexedDB                                                     | Timestamp-linked annotations                         | No (included in local backup export only)                      |
 | AI provider API keys                                                                     | IndexedDB (or `storage.session` for "session only")           | Authenticate your own provider calls                 | Only to the provider you configured, as the request credential |
 | AI results cache (max 200 entries, pruned oldest-first)                                  | IndexedDB                                                     | Avoid re-paying for the same request                 | No                                                             |
 | Diagnostics log (in-memory ring buffer, last 500 events; values redacted)                | Memory of the panel/background                                | Troubleshooting; copied only if you press the button | No                                                             |
@@ -33,7 +34,9 @@ reporting, no remote configuration.
    connection_) in the **AI** tab. The request goes directly from your browser
    to the provider's API with your API key. The transcript text (or, for Q&A,
    the most relevant excerpts) is included so the model can answer. That
-   provider's own privacy policy then applies to that request.
+   provider's own privacy policy then applies to that request. On Firefox, the
+   extension declares optional `websiteContent` data collection and requests
+   consent via the built-in permissions UI before the first send.
 3. **Thumbnails** — the library list loads video thumbnails from
    `i.ytimg.com`, as YouTube's own pages do.
 
@@ -43,6 +46,8 @@ Strict Local Mode (Settings) blocks category 2 entirely except for
 ## Your controls
 
 - Delete a saved transcript: **Library → ✕**.
+- Export / import a library backup: **Settings → Backup** (API keys are never
+  included).
 - Delete an API key: **AI → Delete**.
 - Revoke a provider permission: your browser's extension settings for this
   extension (_Site access_ / _Permissions_).

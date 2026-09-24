@@ -47,7 +47,7 @@ export const TranscriptSegmentSchema = z.object({
   index: z.number().int().nonnegative(),
   startMs: z.number().nonnegative(),
   endMs: z.number().nonnegative(),
-  text: z.string().max(10_000),
+  text: z.string().max(30 * 1024 * 1024),
   speaker: z.string().max(200).optional(),
 });
 
@@ -59,6 +59,14 @@ export const TranscriptSourceSchema = z.object({
     "yt-transcript-panel",
   ]),
   format: z.enum(["json3", "srv3", "vtt"]),
+  completeness: z
+    .object({
+      status: z.literal("complete"),
+      firstCueMs: z.number().nonnegative(),
+      lastCueEndMs: z.number().nonnegative(),
+      videoDurationMs: z.number().nonnegative().optional(),
+    })
+    .optional(),
 });
 
 export const MAX_SEGMENTS = 100_000;
@@ -76,6 +84,7 @@ export const TranscriptSchema = z.object({
 
 export const AvailabilitySchema = z.enum([
   "available",
+  "available-partial",
   "no-captions",
   "login-required",
   "age-restricted",
