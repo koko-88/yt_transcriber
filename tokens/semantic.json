@@ -1,0 +1,44 @@
+{
+  "semantic": {
+    "color": {
+      "$type": "color",
+      "light": {
+        "canvas": { "$value": "{core.color.light.canvas}" },
+        "surface": { "$value": "{core.color.light.surface}" },
+        "hover": { "$value": "{core.color.light.hover}" },
+        "selected": { "$value": "{core.color.light.selected}" },
+        "text": { "$value": "{core.color.light.text}" },
+        "muted": { "$value": "{core.color.light.muted}" },
+        "border": { "$value": "{core.color.light.border}" },
+        "accent": { "$value": "{core.color.light.accent}" },
+        "accentHover": { "$value": "{core.color.light.accentHover}" },
+        "onAccent": { "$value": "{core.color.white}" },
+        "danger": { "$value": "{core.color.light.danger}" },
+        "dangerSurface": { "$value": "{core.color.light.dangerSurface}" }
+      },
+      "dark": {
+        "canvas": { "$value": "{core.color.dark.canvas}" },
+        "surface": { "$value": "{core.color.dark.surface}" },
+        "hover": { "$value": "{core.color.dark.hover}" },
+        "selected": { "$value": "{core.color.dark.selected}" },
+        "text": { "$value": "{core.color.dark.text}" },
+        "muted": { "$value": "{core.color.dark.muted}" },
+        "border": { "$value": "{core.color.dark.border}" },
+        "accent": { "$value": "{core.color.dark.accent}" },
+        "accentHover": { "$value": "{core.color.dark.accentHover}" },
+        "onAccent": { "$value": "{core.color.ink}" },
+        "danger": { "$value": "{core.color.dark.danger}" },
+        "dangerSurface": { "$value": "{core.color.dark.dangerSurface}" }
+      },
+      "highlight": { "$value": "{core.color.highlight}" },
+      "onHighlight": { "$value": "{core.color.ink}" }
+    },
+    "type": {
+      "family": { "$type": "fontFamily", "$value": "{core.font.family}" },
+      "body": { "$type": "dimension", "$value": "{core.font.size.body}" },
+      "caption": { "$type": "dimension", "$value": "{core.font.size.caption}" },
+      "title": { "$type": "dimension", "$value": "{core.font.size.title}" },
+      "heading": { "$type": "dimension", "$value": "{core.font.size.heading}" }
+    }
+  }
+}

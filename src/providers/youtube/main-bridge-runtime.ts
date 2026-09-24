@@ -92,7 +92,8 @@ function currentCaptionTrack(player: YtPlayerRt): {
       .querySelector?.(".ytp-subtitles-button")
       ?.getAttribute("aria-pressed");
     return {
-      hadCaptions: pressed === "true" ? true : pressed === "false" ? false : has,
+      hadCaptions:
+        pressed === "true" ? true : pressed === "false" ? false : has,
       prevTrack: prev ?? null,
     };
   } catch {
@@ -201,9 +202,8 @@ async function handleRestore(
         // The selected track and the visible CC toggle are separate state in
         // YouTube. Let the player settle, then restore the toggle explicitly.
         await new Promise((resolve) => setTimeout(resolve, 250));
-        const button = document.querySelector?.(
-          ".ytp-subtitles-button",
-        ) as HTMLButtonElement | null | undefined;
+        const button = document.querySelector?.(".ytp-subtitles-button") as
+          HTMLButtonElement | null | undefined;
         if (button) {
           for (let attempt = 0; attempt < 3; attempt++) {
             const pressed = button.getAttribute("aria-pressed") === "true";
@@ -229,13 +229,16 @@ async function handleRestore(
         try {
           player.seekTo?.(prev.timeSeconds, true);
           const reached = await waitFor(
-            () => Math.abs((player.getCurrentTime?.() ?? prev.timeSeconds) - prev.timeSeconds) < 1.5,
+            () =>
+              Math.abs(
+                (player.getCurrentTime?.() ?? prev.timeSeconds) -
+                  prev.timeSeconds,
+              ) < 1.5,
             1200,
           );
           if (!reached) {
-            const media = document.querySelector?.(
-              "video.html5-main-video",
-            ) as HTMLVideoElement | null | undefined;
+            const media = document.querySelector?.("video.html5-main-video") as
+              HTMLVideoElement | null | undefined;
             if (media) media.currentTime = prev.timeSeconds;
             player.seekTo?.(prev.timeSeconds, true);
           }
@@ -266,12 +269,12 @@ async function handleEnsurePlaying(
     }
     const t = player.getCurrentTime?.() ?? 0;
     const d = player.getDuration?.() ?? Infinity;
-    const forceNudge = (req.payload as { forceNudge?: unknown } | undefined)
-      ?.forceNudge === true;
+    const forceNudge =
+      (req.payload as { forceNudge?: unknown } | undefined)?.forceNudge ===
+      true;
     if (forceNudge || t < 0.5 || t >= d - 0.5) {
-      const target = forceNudge && t < d - 6
-        ? t + 5
-        : Math.min(2, Math.max(0, d / 10));
+      const target =
+        forceNudge && t < d - 6 ? t + 5 : Math.min(2, Math.max(0, d / 10));
       player.seekTo?.(target, true);
       if (prev) prev.didSeek = true;
     }

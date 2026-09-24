@@ -210,6 +210,39 @@ describe("empty timedtext response fallback", () => {
     expect(actions.filter((a) => a === "restorePlayback")).toHaveLength(1);
   });
 
+  it("waits for an in-flight reload nudge before restoring user state", async () => {
+    const { bridge, actions, emit } = makeBridge();
+    let finishReload: (() => void) | undefined;
+    bridge.enableTrack = async (opts) => {
+      if (!opts.forceReload) return;
+      actions.push("reload-started");
+      await new Promise<void>((resolve) => {
+        finishReload = resolve;
+      });
+      actions.push("reload-finished");
+    };
+
+    const run = acquireTranscript({
+      bridge,
+      videoId,
+      signal: new AbortController().signal,
+      preferredLangs: ["en"],
+      fetchCaption: async () => ({ status: 403, body: "" }),
+    });
+    await vi.advanceTimersByTimeAsync(1800);
+    expect(actions).toContain("reload-started");
+    emit({ url: enUrl(), status: 200, body: fullBody });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(actions).not.toContain("restorePlayback");
+    finishReload?.();
+    const result = await run;
+    expect(result.ok).toBe(true);
+    expect(actions.indexOf("restorePlayback")).toBeGreaterThan(
+      actions.indexOf("reload-finished"),
+    );
+  });
+
   it("restores player state on empty-response timeout", async () => {
     const { bridge, actions, emit } = makeBridge();
     const run = acquireTranscript({

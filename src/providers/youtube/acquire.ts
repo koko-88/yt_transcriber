@@ -331,6 +331,7 @@ async function tryPlayerObserved(
 ): Promise<Transcript | null> {
   const captureAbort = new AbortController();
   let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
+  let nudgePromise: Promise<void> | null = null;
   try {
     await tracer.run("c3b-capture", "startCapture", () =>
       deps.bridge.startCapture(),
@@ -340,6 +341,15 @@ async function tryPlayerObserved(
       entry,
       CAPTURE_TIMEOUT_MS,
       captureAbort.signal,
+    );
+    let captureSettled = false;
+    void capturePromise.then(
+      () => {
+        captureSettled = true;
+      },
+      () => {
+        captureSettled = true;
+      },
     );
     void capturePromise.catch(() => undefined);
     await tracer.run("c3b-capture", "enableTrack", () =>
@@ -363,15 +373,17 @@ async function tryPlayerObserved(
       // After an empty 200 the player may need one force-reload nudge while
       // the SAME capture window keeps observing. Do not start a second timeout.
       nudgeTimer = setTimeout(() => {
-        void deps.bridge
-          .enableTrack({
+        nudgePromise = (async () => {
+          await deps.bridge.enableTrack({
             languageCode: entry.track.languageCode,
             ...(entry.track.kind === "asr" ? { kind: "asr" } : {}),
             ...(entry.vssId ? { vssId: entry.vssId } : {}),
             forceReload: true,
-          })
-          .catch(() => undefined);
-        void deps.bridge.ensurePlaying(true).catch(() => undefined);
+          });
+          if (!captureSettled && !deps.signal.aborted) {
+            await deps.bridge.ensurePlaying(true);
+          }
+        })().catch(() => undefined);
       }, EMPTY_RESPONSE_NUDGE_MS);
     }
 
@@ -417,6 +429,9 @@ async function tryPlayerObserved(
   } finally {
     if (nudgeTimer) clearTimeout(nudgeTimer);
     captureAbort.abort();
+    // clearTimeout does not cancel a callback already running. A late nudge
+    // must finish before restoration or it can re-enable CC/playback after it.
+    if (nudgePromise) await nudgePromise;
     await deps.bridge.restorePlayback().catch(() => undefined);
     await deps.bridge.stopCapture().catch(() => undefined);
   }

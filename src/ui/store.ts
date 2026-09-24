@@ -14,9 +14,17 @@ import type { AppSettings } from "../storage/settings.js";
 import { DEFAULT_SETTINGS } from "../storage/settings.js";
 import type { Locale, MessageKey } from "../core/i18n.js";
 import { t as translate } from "../core/i18n.js";
+import type { PanelContext } from "../platform/tab-context.js";
 
 export type PanelTab = "transcript" | "library" | "ai" | "settings";
 export type ViewMode = "paragraph" | "raw";
+export type ShellStatus =
+  | "ready"
+  | "no-video-tab"
+  | "unsupported-page"
+  | "content-unavailable"
+  | "player-initializing"
+  | "routing-failed";
 
 export interface LibraryItem {
   videoId: string;
@@ -37,6 +45,7 @@ interface PanelState {
 
   // current YouTube page
   videoId: string | null;
+  shellStatus: ShellStatus;
   availability: Availability;
   tracks: TranscriptTrack[];
   metadata: VideoPageState["metadata"];
@@ -108,6 +117,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   locale: "en",
 
   videoId: null,
+  shellStatus: "no-video-tab",
   availability: "not-a-video-page",
   tracks: [],
   metadata: null,
@@ -155,6 +165,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         refreshRetryCount = 0;
         set({
           videoId: msg.payload?.videoId ?? null,
+          shellStatus: msg.payload?.videoId
+            ? "player-initializing"
+            : "no-video-tab",
           transcript: null,
           tracks: [],
           metadata: null,
@@ -206,9 +219,38 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       }, delay);
     };
     try {
+      const context = await bus.request<PanelContext>("panel.context");
+      if (epoch !== pageEpoch) return;
+      if (context.status !== "video" || !context.videoId) {
+        acquireEpoch++;
+        refreshRetryCount = 0;
+        set({
+          videoId: null,
+          shellStatus:
+            context.status === "video" ? "routing-failed" : context.status,
+          availability: "not-a-video-page",
+          tracks: [],
+          metadata: null,
+          transcript: null,
+          loading: false,
+        });
+        return;
+      }
+      if (get().videoId !== context.videoId) {
+        acquireEpoch++;
+        set({
+          videoId: context.videoId,
+          shellStatus: "player-initializing",
+          availability: "unsupported-page-structure",
+          transcript: null,
+          tracks: [],
+          metadata: null,
+          loading: false,
+        });
+      }
       const state = await bus.request<VideoPageState>("acq.getState");
       if (epoch !== pageEpoch) return;
-      if (get().videoId && state.videoId !== get().videoId) {
+      if (state.videoId !== context.videoId) {
         retryTransientFailure();
         return;
       }
@@ -219,6 +261,11 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       }
       set({
         videoId: state.videoId,
+        shellStatus:
+          state.availability === "unsupported-page-structure" &&
+          refreshRetryCount < 8
+            ? "player-initializing"
+            : "ready",
         availability: state.availability,
         tracks: state.tracks,
         metadata: state.metadata,
@@ -231,14 +278,19 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         void get().acquire();
       }
     } catch (e) {
-      logger.warn("panel", "getState failed (no youtube tab?)", {
+      logger.warn("panel", "video context or content routing failed", {
         error: String(e),
       });
+      if (epoch !== pageEpoch) return;
+      const message = String(e);
+      const contentUnavailable =
+        /receiving end does not exist|could not establish connection|no response received/i.test(
+          message,
+        );
       set({
-        videoId: null,
-        availability: "not-a-video-page",
-        tracks: [],
-        metadata: null,
+        shellStatus: contentUnavailable
+          ? "content-unavailable"
+          : "routing-failed",
       });
       retryTransientFailure();
     }

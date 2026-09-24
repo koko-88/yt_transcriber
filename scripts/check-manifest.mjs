@@ -103,6 +103,11 @@ for (const [browserName, rel] of [
   );
 
   if (browserName === "firefox") {
+    check(
+      `${browserName}: WXT sidebar entrypoint`,
+      m.sidebar_action?.default_panel === "sidepanel.html",
+      JSON.stringify(m.sidebar_action),
+    );
     const dcp = m.browser_specific_settings?.gecko?.data_collection_permissions;
     check(
       `${browserName}: data_collection_permissions present`,
@@ -121,6 +126,14 @@ for (const [browserName, rel] of [
       Array.isArray(dcp?.optional) && dcp.optional.includes("websiteContent"),
       JSON.stringify(dcp),
     );
+  }
+  if (browserName === "chrome") {
+    check(
+      `${browserName}: WXT side-panel entrypoint`,
+      m.side_panel?.default_path === "sidepanel.html",
+      JSON.stringify(m.side_panel),
+    );
+    check(`${browserName}: no detached popup action`, !m.action?.default_popup);
   }
 }
 

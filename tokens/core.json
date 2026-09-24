@@ -1,0 +1,75 @@
+{
+  "core": {
+    "color": {
+      "$type": "color",
+      "light": {
+        "canvas": { "$value": "#ffffff" },
+        "surface": { "$value": "#f8f8f8" },
+        "hover": { "$value": "#f1f1f1" },
+        "selected": { "$value": "#e7f0fd" },
+        "text": { "$value": "#0f0f0f" },
+        "muted": { "$value": "#606060" },
+        "border": { "$value": "#dedede" },
+        "accent": { "$value": "#065fd4" },
+        "accentHover": { "$value": "#034ea9" },
+        "danger": { "$value": "#b3261e" },
+        "dangerSurface": { "$value": "#fff0ee" }
+      },
+      "dark": {
+        "canvas": { "$value": "#0f0f0f" },
+        "surface": { "$value": "#212121" },
+        "hover": { "$value": "#303030" },
+        "selected": { "$value": "#183a5a" },
+        "text": { "$value": "#f1f1f1" },
+        "muted": { "$value": "#aaaaaa" },
+        "border": { "$value": "#3f3f3f" },
+        "accent": { "$value": "#3ea6ff" },
+        "accentHover": { "$value": "#75c0ff" },
+        "danger": { "$value": "#ffb4ab" },
+        "dangerSurface": { "$value": "#42211f" }
+      },
+      "white": { "$value": "#ffffff" },
+      "ink": { "$value": "#0f0f0f" },
+      "highlight": { "$value": "#ffe168" }
+    },
+    "space": {
+      "$type": "dimension",
+      "0": { "$value": "0px" },
+      "2": { "$value": "2px" },
+      "4": { "$value": "4px" },
+      "6": { "$value": "6px" },
+      "8": { "$value": "8px" },
+      "12": { "$value": "12px" },
+      "16": { "$value": "16px" },
+      "20": { "$value": "20px" },
+      "24": { "$value": "24px" },
+      "32": { "$value": "32px" }
+    },
+    "radius": {
+      "$type": "dimension",
+      "sm": { "$value": "4px" },
+      "md": { "$value": "8px" },
+      "lg": { "$value": "12px" },
+      "pill": { "$value": "999px" }
+    },
+    "font": {
+      "family": {
+        "$type": "fontFamily",
+        "$value": "Roboto, 'Segoe UI', 'Noto Sans', 'Noto Sans Arabic', Arial, sans-serif"
+      },
+      "size": {
+        "$type": "dimension",
+        "caption": { "$value": "12px" },
+        "body": { "$value": "14px" },
+        "title": { "$value": "16px" },
+        "heading": { "$value": "18px" }
+      },
+      "weight": {
+        "$type": "fontWeight",
+        "regular": { "$value": 400 },
+        "medium": { "$value": 500 },
+        "semibold": { "$value": 600 }
+      }
+    }
+  }
+}

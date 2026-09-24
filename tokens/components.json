@@ -1,0 +1,16 @@
+{
+  "component": {
+    "workbench": {
+      "minimumWidth": { "$type": "dimension", "$value": "280px" },
+      "contentInset": { "$type": "dimension", "$value": "{core.space.16}" }
+    },
+    "control": {
+      "height": { "$type": "dimension", "$value": "36px" },
+      "radius": { "$type": "dimension", "$value": "{core.radius.md}" }
+    },
+    "transcript": {
+      "rowGap": { "$type": "dimension", "$value": "{core.space.4}" },
+      "timestampWidth": { "$type": "dimension", "$value": "48px" }
+    }
+  }
+}

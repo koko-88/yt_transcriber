@@ -76,23 +76,12 @@ export default defineConfig({
             },
           },
         },
-        sidebar_action: {
-          default_title: "Transcript Workbench",
-          default_panel: "src/entrypoints/sidepanel/index.html",
-          default_icon: {
-            16: "icon/16.png",
-            32: "icon/32.png",
-          },
-        },
       };
     }
 
     return {
       ...base,
       minimum_chrome_version: "128",
-      side_panel: {
-        default_path: "src/entrypoints/sidepanel/index.html",
-      },
     };
   },
 });

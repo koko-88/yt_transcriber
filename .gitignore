@@ -46,3 +46,12 @@ Thumbs.db
 # Local spike / scratch
 spike/
 *.local.*
+
+*storybook.log
+storybook-static
+
+# Local UI workflow artifacts
+.storybook-cache
+.ui-install.*
+.npm-ci.*
+

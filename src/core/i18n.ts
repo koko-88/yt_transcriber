@@ -24,10 +24,23 @@ export const messages = {
 
     // Transcript
     "transcript.loading": "Loading transcript…",
+    "transcript.get": "Get transcript",
+    "shell.no-video-tab":
+      "Open a YouTube video, then open Transcript Workbench.",
+    "shell.unsupported-page":
+      "Open a YouTube watch video or Short to get its transcript.",
+    "shell.content-unavailable":
+      "This YouTube tab is not connected to the extension. Refresh the video tab once, then reconnect.",
+    "shell.player-initializing": "Connecting to the YouTube player…",
+    "shell.routing-failed":
+      "Could not connect to the extension background. Reopen the panel or reload the extension.",
+    "shell.reconnect": "Reconnect",
     "transcript.search.placeholder": "Search transcript…",
     "transcript.search.results": "{count} results",
+    "transcript.search.empty": "No matching lines. Try a different search.",
     "transcript.view.paragraph": "Paragraph",
-    "transcript.view.raw": "Raw",
+    "transcript.view.raw": "Segments",
+    "transcript.actions": "Actions",
     "transcript.follow": "Follow playback",
     "transcript.copy.text": "Copy text",
     "transcript.copy.timestamps": "Copy with timestamps",
@@ -198,10 +211,21 @@ export const messages = {
 
     // Transcript
     "transcript.loading": "جاري تحميل النسخة النصية…",
+    "transcript.get": "احصل على النص",
+    "shell.no-video-tab": "افتح فيديو على YouTube ثم افتح مساحة النص.",
+    "shell.unsupported-page": "افتح صفحة فيديو أو مقطع قصير على YouTube.",
+    "shell.content-unavailable":
+      "تبويب YouTube غير متصل بالإضافة. حدّث صفحة الفيديو مرة ثم أعد الاتصال.",
+    "shell.player-initializing": "جارٍ الاتصال بمشغّل YouTube…",
+    "shell.routing-failed":
+      "تعذّر الاتصال بخدمة الإضافة. أعد فتح اللوحة أو أعد تحميل الإضافة.",
+    "shell.reconnect": "إعادة الاتصال",
     "transcript.search.placeholder": "البحث في النسخة النصية…",
     "transcript.search.results": "{count} نتائج",
+    "transcript.search.empty": "لا توجد مقاطع مطابقة. جرّب بحثًا آخر.",
     "transcript.view.paragraph": "فقرات",
-    "transcript.view.raw": "خام",
+    "transcript.view.raw": "مقاطع",
+    "transcript.actions": "إجراءات",
     "transcript.follow": "تتبع التشغيل",
     "transcript.copy.text": "نسخ النص",
     "transcript.copy.timestamps": "نسخ مع الأوقات",

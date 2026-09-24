@@ -69,7 +69,9 @@ async function runtime(initial: {
     getElementById: () => player,
     querySelector: () => ({
       getAttribute: () => (captionsPressed ? "true" : "false"),
-      click: () => { captionsPressed = !captionsPressed; },
+      click: () => {
+        captionsPressed = !captionsPressed;
+      },
     }),
   });
   vi.stubGlobal("location", { origin: "https://www.youtube.com" });
@@ -112,7 +114,12 @@ describe("temporary player interaction", () => {
     await app.send("hello");
     await app.send("enableTrack", { languageCode: "en", vssId: ".en" });
     await app.send("ensurePlaying");
-    expect(app.state()).toMatchObject({ playing: true, muted: true, time: 2, captionsPressed: true });
+    expect(app.state()).toMatchObject({
+      playing: true,
+      muted: true,
+      time: 2,
+      captionsPressed: true,
+    });
     await app.send("restorePlayback");
     expect(app.state()).toEqual({
       playing: false,
@@ -161,14 +168,20 @@ describe("temporary player interaction", () => {
 
   it("keeps CC visually off even when YouTube reports a default selected track", async () => {
     const app = await runtime({
-      playing: false, muted: true, time: 40,
-      track: { languageCode: "en", vssId: ".en" }, captionsPressed: false,
+      playing: false,
+      muted: true,
+      time: 40,
+      track: { languageCode: "en", vssId: ".en" },
+      captionsPressed: false,
     });
     await app.send("hello");
     await app.send("enableTrack", { languageCode: "de", vssId: ".de" });
     await app.send("restorePlayback");
     expect(app.state()).toMatchObject({
-      playing: false, muted: true, time: 40, captionsPressed: false,
+      playing: false,
+      muted: true,
+      time: 40,
+      captionsPressed: false,
     });
   });
 });

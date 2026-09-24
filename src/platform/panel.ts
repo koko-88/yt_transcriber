@@ -1,51 +1,31 @@
-// Side panel / popup-window abstraction. Chromium browsers expose the Side
-// Panel API; Firefox (MV2 sidebar_action) and browsers without it fall back to
-// a small popup window.
+// Native browser companion surfaces. Chrome/Brave own the action-to-side-panel
+// gesture; Firefox toggles its sidebar directly from the toolbar click.
 
 import { browser } from "wxt/browser";
-import { logger } from "../core/logger.js";
 
-const PANEL_URL = "/sidepanel.html";
-
-interface SidePanelApi {
-  setOptions: (o: {
-    tabId?: number;
-    path: string;
-    enabled: boolean;
+interface ChromeSidePanel {
+  setPanelBehavior: (behavior: {
+    openPanelOnActionClick: boolean;
   }) => Promise<void>;
-  open: (o: { tabId?: number; windowId?: number }) => Promise<void>;
 }
 
-function getSidePanelApi(): SidePanelApi | null {
-  return (browser as unknown as { sidePanel?: SidePanelApi }).sidePanel ?? null;
+interface FirefoxSidebar {
+  toggle: () => Promise<void>;
 }
 
-/**
- * Open the transcript workbench panel for the given tab/window.
- * Safe to call from the background worker only.
- */
-export async function openSidePanel(
-  tabId?: number,
-  windowId?: number,
-): Promise<void> {
-  const sp = getSidePanelApi();
-  if (sp) {
-    try {
-      if (tabId != null) {
-        await sp.setOptions({ tabId, path: PANEL_URL, enabled: true });
-        await sp.open({ tabId });
-      } else if (windowId != null) {
-        await sp.open({ windowId });
-      }
-      return;
-    } catch (e) {
-      logger.warn("panel", "sidePanel API failed, falling back to window", {
-        error: String(e),
-      });
-    }
+export function configurePanelAction(): Promise<void> {
+  const panel = (browser as unknown as { sidePanel?: ChromeSidePanel })
+    .sidePanel;
+  if (!panel) return Promise.resolve();
+  return panel.setPanelBehavior({ openPanelOnActionClick: true });
+}
+
+export function toggleFirefoxSidebar(): Promise<void> {
+  const sidebar = (browser as unknown as { sidebarAction?: FirefoxSidebar })
+    .sidebarAction;
+  if (!sidebar) {
+    return Promise.reject(new Error("Firefox sidebarAction API unavailable"));
   }
-
-  // Firefox / fallback path: popup window
-  const url = (browser.runtime.getURL as (p: string) => string)(PANEL_URL);
-  await browser.windows.create({ url, type: "popup", width: 420, height: 720 });
+  // No awaited tab lookup here: sidebarAction.toggle requires the click gesture.
+  return sidebar.toggle();
 }

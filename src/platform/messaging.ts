@@ -95,7 +95,7 @@ function isErrorCode(value: string | undefined): value is ErrorCode {
   return value !== undefined && ERROR_CODES.has(value as ErrorCode);
 }
 
-class MessageBus {
+export class MessageBus {
   private handlers = new Map<
     string,
     {
@@ -183,6 +183,13 @@ class MessageBus {
       browser.runtime.onMessage
     ) {
       browser.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        // Runtime messages reach every extension context. Only the context
+        // that registered this request may answer it; otherwise a panel or
+        // content script can race the background with "No handler".
+        const envelope = MessageSchema.safeParse(message);
+        if (!envelope.success || !this.handlers.has(envelope.data.type)) {
+          return false;
+        }
         // Must handle asynchronously
         this.handleMessage(message, sender).then(sendResponse);
         return true; // Keep channel open for async response

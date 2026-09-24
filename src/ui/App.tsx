@@ -44,6 +44,15 @@ export function App() {
 
   return (
     <div className="app">
+      <header className="app-header">
+        <span className="app-mark" aria-hidden="true">
+          T
+        </span>
+        <div>
+          <h1 className="app-title">{tr("app.name")}</h1>
+          <div className="app-subtitle">YouTube</div>
+        </div>
+      </header>
       <nav className="tabbar" role="tablist" aria-label={tr("app.name")}>
         {TABS.map((id) => (
           <button
@@ -57,11 +66,12 @@ export function App() {
             onKeyDown={(e) => {
               if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
               e.preventDefault();
-              const idx = TABS.indexOf(tab);
+              const idx = TABS.indexOf(id);
+              const direction = document.documentElement.dir === "rtl" ? -1 : 1;
               const next =
                 e.key === "ArrowRight"
-                  ? (idx + 1) % TABS.length
-                  : (idx - 1 + TABS.length) % TABS.length;
+                  ? (idx + direction + TABS.length) % TABS.length
+                  : (idx - direction + TABS.length) % TABS.length;
               const nextId = TABS[next];
               if (!nextId) return;
               setTab(nextId);

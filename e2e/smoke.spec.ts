@@ -165,8 +165,75 @@ test("transcript empty / not-a-video state is announced", async () => {
   // No YouTube tab in this context — panel should show a non-video banner,
   // not hang on Loading.
   await expect(page.getByRole("tablist")).toBeVisible();
-  await expect(page.locator(".banner").first()).toBeVisible({
-    timeout: 10_000,
-  });
+  await expect(page.getByRole("status")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByText("Open a YouTube video", { exact: false })).toBeVisible();
   await page.close();
+});
+
+test("product entry opens a native panel and binds the active YouTube video", async () => {
+  const worker = context!
+    .serviceWorkers()
+    .find((candidate) =>
+      candidate.url().startsWith(`chrome-extension://${extensionId}/`),
+    );
+  expect(worker).toBeTruthy();
+  const behavior = await worker!.evaluate(() =>
+    chrome.sidePanel.getPanelBehavior(),
+  );
+  expect(behavior.openPanelOnActionClick).toBe(true);
+
+  const videoId = "jNQXAC9IVRw";
+  const video = await context!.newPage();
+  await video.route(`https://www.youtube.com/watch?v=${videoId}`, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "text/html",
+      body: "<!doctype html><title>Fixture video</title><div id='movie_player'></div>",
+    }),
+  );
+  await video.goto(`https://www.youtube.com/watch?v=${videoId}`);
+
+  // Playwright cannot click Chrome's toolbar. This extension-page user gesture
+  // exercises the same native sidePanel.open surface, while the assertion above
+  // verifies the actual toolbar action has been assigned to that surface.
+  const launcher = await context!.newPage();
+  await launcher.goto(`chrome-extension://${extensionId}/sidepanel.html`);
+  await launcher.evaluate(() => {
+    const button = document.createElement("button");
+    button.id = "e2e-open-native-panel";
+    button.textContent = "Open native panel";
+    button.addEventListener("click", () => {
+      void chrome.sidePanel.open({
+        windowId: chrome.windows.WINDOW_ID_CURRENT,
+      });
+    });
+    document.body.append(button);
+  });
+  await launcher.locator("#e2e-open-native-panel").click();
+
+  await expect
+    .poll(async () => {
+      const cdp = await context!.browser()!.newBrowserCDPSession();
+      const targets = await cdp.send("Target.getTargets");
+      await cdp.detach();
+      return targets.targetInfos.filter((target) =>
+        target.url.endsWith("/sidepanel.html"),
+      ).length;
+    })
+    .toBeGreaterThanOrEqual(2);
+
+  await video.bringToFront();
+  const binding = await launcher.evaluate(() =>
+    chrome.runtime.sendMessage({ type: "panel.context", payload: {} }),
+  );
+  expect(binding, JSON.stringify(binding)).toMatchObject({
+    ok: true,
+    data: { status: "video", videoId },
+  });
+
+  const windows = await worker!.evaluate(() => chrome.windows.getAll());
+  expect(windows).toHaveLength(1);
+  expect(windows[0]?.type).toBe("normal");
+  await launcher.close();
+  await video.close();
 });

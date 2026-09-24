@@ -7,7 +7,10 @@ import { browser } from "wxt/browser";
 import { defineBackground } from "#imports";
 import { z } from "zod";
 import { bus } from "../platform/messaging.js";
-import { openSidePanel } from "../platform/panel.js";
+import {
+  configurePanelAction,
+  toggleFirefoxSidebar,
+} from "../platform/panel.js";
 import { logger } from "../core/logger.js";
 import { AppError } from "../core/errors.js";
 import {
@@ -37,109 +40,97 @@ import {
   upsertHighlight,
   deleteHighlight,
 } from "../storage/notes.js";
-import { AI_PROVIDERS } from "../ai/registry.js";
-import { runAi, testAi } from "../ai/runner.js";
-import type { AiRunRequest } from "../ai/types.js";
 import { setSecret, deleteSecret, getSecret } from "../storage/secrets.js";
 import { videoIdFromUrl } from "../providers/youtube/session.js";
+import { panelContextForTab } from "../platform/tab-context.js";
 
-/** True when a tab URL is a YouTube watch/shorts page we can acquire from. */
-function isYoutubeVideoTab(url: string | undefined): boolean {
-  return url != null && videoIdFromUrl(url) != null;
+/** The active browser tab is the only valid transcript target. */
+async function activeTab() {
+  const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+  return tab;
 }
 
 /**
  * Resolve the YouTube tab a panel request should act on.
- * Never use the extension-page sender tab — when the panel is opened as a
- * normal tab (E2E, "Open in tab"), sender.tab is the panel itself.
+ * Never search other windows for a convenient YouTube tab: that can show a
+ * transcript belonging to a different video than the one the user is viewing.
  */
-async function resolveTargetTabId(
-  _senderTabId: number | undefined,
-): Promise<number> {
-  const [active] = await browser.tabs.query({
-    active: true,
-    currentWindow: true,
-  });
-  if (active?.id != null && isYoutubeVideoTab(active.url)) {
-    return active.id;
-  }
-
-  const candidates = await browser.tabs.query({
-    url: ["https://www.youtube.com/watch*", "https://www.youtube.com/shorts/*"],
-  });
-  const current = await browser.windows.getCurrent().catch(() => null);
-  const sameWindow = current
-    ? candidates.filter((t) => t.windowId === current.id)
-    : [];
-  const pick = sameWindow[0] ?? candidates[0];
-  if (pick?.id != null) return pick.id;
+async function resolveTargetTabId(): Promise<number> {
+  const active = await activeTab();
+  if (active?.id != null && videoIdFromUrl(active.url ?? "")) return active.id;
 
   throw new AppError({
     code: "ACQ_NO_PLAYER",
-    message: "no youtube video tab open",
+    message: "active tab is not a YouTube video",
   });
 }
 
-async function forwardToContent<T>(
-  type: string,
-  payload: unknown,
-  senderTabId: number | undefined,
-): Promise<T> {
-  const tabId = await resolveTargetTabId(senderTabId);
+async function forwardToContent<T>(type: string, payload: unknown): Promise<T> {
+  const tabId = await resolveTargetTabId();
   return bus.request<T>(type, payload, tabId);
 }
 
 export default defineBackground(() => {
-  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
-    if (!change.url || !tab.active) return;
-    const videoId = videoIdFromUrl(change.url);
-    if (!videoId) return;
-    browser.runtime
+  void configurePanelAction().catch((error) =>
+    logger.error("background", "native side-panel action setup failed", {
+      error: String(error),
+    }),
+  );
+
+  const notifyVideoChanged = (videoId: string | null) => {
+    void browser.runtime
       .sendMessage({ type: "panel.videoChanged", payload: { videoId } })
       .catch(() => undefined);
+  };
+  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
+    if (!change.url || !tab.active) return;
+    notifyVideoChanged(videoIdFromUrl(change.url));
   });
-  // Open the panel on toolbar click and on the keyboard shortcut.
-  browser.action.onClicked.addListener((tab) => {
-    openSidePanel(tab.id, tab.windowId).catch((e) =>
-      logger.error("background", "openSidePanel failed", { error: String(e) }),
-    );
+  browser.tabs.onActivated.addListener(({ tabId }) => {
+    void browser.tabs
+      .get(tabId)
+      .then((tab) => notifyVideoChanged(videoIdFromUrl(tab.url ?? "")))
+      .catch(() => undefined);
   });
 
-  browser.commands?.onCommand.addListener((command) => {
-    if (command === "_execute_action") {
-      void browser.tabs
-        .query({ active: true, currentWindow: true })
-        .then(([tab]) => openSidePanel(tab?.id, tab?.windowId));
-    }
+  // Chromium's browser action opens its native side panel. Firefox's toolbar
+  // click toggles its native sidebar without losing the user gesture.
+  const toolbarAction = browser.action ?? browser.browserAction;
+  toolbarAction.onClicked.addListener(() => {
+    if ((browser as unknown as { sidePanel?: unknown }).sidePanel) return;
+    void toggleFirefoxSidebar().catch((error) =>
+      logger.error("background", "native sidebar open failed", {
+        error: String(error),
+      }),
+    );
   });
 
   // ---- routing: panel -> content script ----
 
-  bus.on("panel.open", z.object({}), ["extension-page"], async (_p, sender) => {
-    await openSidePanel(sender.tab?.id, sender.tab?.windowId);
-    return { ok: true };
+  bus.on("panel.context", z.object({}), ["extension-page"], async () => {
+    return panelContextForTab(await activeTab());
   });
 
-  bus.on("acq.getState", z.object({}), ["extension-page"], (_p, sender) =>
-    forwardToContent("acq.getState", {}, sender.tab?.id),
+  bus.on("acq.getState", z.object({}), ["extension-page"], () =>
+    forwardToContent("acq.getState", {}),
   );
 
   bus.on(
     "acq.acquire",
     z.object({ trackId: z.string().optional() }),
     ["extension-page"],
-    (p, sender) => forwardToContent("acq.acquire", p, sender.tab?.id),
+    (p) => forwardToContent("acq.acquire", p),
   );
 
   bus.on(
     "acq.seek",
     z.object({ timeMs: z.number().int().nonnegative() }),
     ["extension-page"],
-    (p, sender) => forwardToContent("acq.seek", p, sender.tab?.id),
+    (p) => forwardToContent("acq.seek", p),
   );
 
-  bus.on("playback.getTime", z.object({}), ["extension-page"], (_p, sender) =>
-    forwardToContent("playback.getTime", {}, sender.tab?.id),
+  bus.on("playback.getTime", z.object({}), ["extension-page"], () =>
+    forwardToContent("playback.getTime", {}),
   );
 
   // ---- relay: content script -> all panel pages ----
@@ -148,10 +139,9 @@ export default defineBackground(() => {
     "page.videoChanged",
     z.object({ videoId: z.string().nullable() }),
     ["content-script"],
-    async (p) => {
-      browser.runtime
-        .sendMessage({ type: "panel.videoChanged", payload: p })
-        .catch(() => undefined);
+    async (p, sender) => {
+      const tab = await activeTab();
+      if (sender.tab?.id === tab?.id) notifyVideoChanged(p.videoId);
       return { ok: true };
     },
   );
@@ -297,40 +287,6 @@ export function registerStorageHandlers(): void {
   );
 }
 export function registerAiHandlers(): void {
-  bus.on("ai.providers", z.object({}), ["extension-page"], async () =>
-    AI_PROVIDERS.map((p) => ({
-      id: p.id,
-      label: p.label,
-      defaultModel: p.defaultModel,
-      requiresKey: p.requiresKey,
-      isLocal: p.isLocal,
-      originPattern: p.originPattern,
-    })),
-  );
-
-  bus.on(
-    "ai.run",
-    z.object({
-      request: z.object({
-        pipeline: z.enum(["summary", "takeaways", "chapters", "qa"]),
-        transcript: TranscriptSchema,
-        providerId: z.string(),
-        model: z.string(),
-        question: z.string().max(2000).optional(),
-      }),
-      consent: z.boolean().optional(),
-    }),
-    ["extension-page"],
-    async (p) => runAi(p.request as AiRunRequest, p.consent ?? false),
-  );
-
-  bus.on(
-    "ai.test",
-    z.object({ providerId: z.string(), model: z.string() }),
-    ["extension-page"],
-    async (p) => testAi(p.providerId, p.model),
-  );
-
   bus.on(
     "ai.secret.set",
     z.object({

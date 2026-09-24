@@ -20,6 +20,7 @@ import {
 import type { TranscriptSegment } from "../../core/model.js";
 import type { Availability } from "../../core/result.js";
 import type { MessageKey } from "../../core/i18n.js";
+import type { ShellStatus } from "../store.js";
 
 function download(filename: string, content: string, mime: string): void {
   const blob = new Blob([content], { type: mime });
@@ -48,6 +49,14 @@ const AVAILABILITY_KEYS: Record<Availability, MessageKey> = {
   "unsupported-page-structure": "availability.unsupported-page-structure",
   "network-error": "availability.network-error",
   unknown: "availability.unknown",
+};
+
+const SHELL_KEYS: Record<Exclude<ShellStatus, "ready">, MessageKey> = {
+  "no-video-tab": "shell.no-video-tab",
+  "unsupported-page": "shell.unsupported-page",
+  "content-unavailable": "shell.content-unavailable",
+  "player-initializing": "shell.player-initializing",
+  "routing-failed": "shell.routing-failed",
 };
 
 function HighlightedText({
@@ -160,34 +169,51 @@ export function TranscriptView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.playbackMs, s.follow, s.viewMode, paragraphs, filtered]);
 
-  if (s.availability !== "available" || !transcript) {
-    const key = AVAILABILITY_KEYS[s.availability];
+  if (
+    s.shellStatus !== "ready" ||
+    s.availability !== "available" ||
+    !transcript
+  ) {
+    const key =
+      s.shellStatus === "ready"
+        ? AVAILABILITY_KEYS[s.availability]
+        : SHELL_KEYS[s.shellStatus];
     return (
-      <div className="view">
-        <div
-          className="banner"
-          data-tone={s.availability === "unknown" ? "error" : undefined}
-        >
-          {s.loading ? (
-            <span>
-              <span className="spinner" />
-              {s.tr("transcript.loading")}
-            </span>
-          ) : (
-            s.tr(key)
+      <div className="view empty-state">
+        {s.loading && <span className="spinner" aria-hidden="true" />}
+        <h2>{s.tr("nav.transcript")}</h2>
+        <p role="status">
+          {s.loading ? s.tr("transcript.loading") : s.tr(key)}
+        </p>
+        {s.shellStatus !== "ready" &&
+          s.shellStatus !== "no-video-tab" &&
+          s.shellStatus !== "unsupported-page" && (
+            <button
+              className="btn primary"
+              onClick={() => void s.refreshPageState()}
+            >
+              {s.tr("shell.reconnect")}
+            </button>
           )}
-        </div>
-        {(s.availability === "available-partial" ||
-          s.availability === "fetch-empty" ||
-          s.availability === "needs-player-interaction" ||
-          s.availability === "network-error" ||
-          s.availability === "parse-failed" ||
-          s.availability === "unknown" ||
-          s.availability === "unsupported-page-structure") && (
-          <button className="btn primary" onClick={() => void s.acquire()}>
-            {s.tr("general.retry")}
-          </button>
-        )}
+        {s.shellStatus === "ready" &&
+          s.videoId &&
+          !s.loading &&
+          (s.availability === "available" ||
+            s.availability === "available-partial" ||
+            s.availability === "fetch-empty" ||
+            s.availability === "needs-player-interaction" ||
+            s.availability === "network-error" ||
+            s.availability === "parse-failed" ||
+            s.availability === "unknown" ||
+            s.availability === "unsupported-page-structure") && (
+            <button className="btn primary" onClick={() => void s.acquire()}>
+              {s.tr(
+                s.availability === "available"
+                  ? "transcript.get"
+                  : "general.retry",
+              )}
+            </button>
+          )}
       </div>
     );
   }
@@ -235,23 +261,16 @@ export function TranscriptView() {
   };
 
   return (
-    <div className="view" style={{ padding: 0 }}>
-      <div
-        style={{
-          padding: "12px 12px 0",
-          display: "flex",
-          flexDirection: "column",
-          gap: 10,
-        }}
-      >
+    <div className="view transcript-view">
+      <div className="transcript-head">
         <div className="meta">
-          <h1>{transcript.video.title}</h1>
+          <h2>{transcript.video.title}</h2>
           {transcript.video.channelName && (
             <div className="channel">{transcript.video.channelName}</div>
           )}
         </div>
 
-        <div className="toolbar">
+        <div className="toolbar transcript-search">
           <input
             type="search"
             placeholder={s.tr("transcript.search.placeholder")}
@@ -259,110 +278,178 @@ export function TranscriptView() {
             onChange={(e) => s.setSearchQuery(e.target.value)}
             aria-label={s.tr("transcript.search.placeholder")}
           />
+        </div>
+
+        <div className="transcript-controls">
           <select
             value={transcript.track.trackId}
             onChange={(e) => void s.acquire(e.target.value)}
             aria-label={s.tr("transcript.tracks")}
+            disabled={s.loading || s.tracks.length === 0}
           >
-            {s.tracks.map((tr) => (
-              <option key={tr.trackId} value={tr.trackId}>
-                {tr.languageLabel} (
-                {tr.kind === "manual"
+            {!s.tracks.some(
+              (track) => track.trackId === transcript.track.trackId,
+            ) && (
+              <option value={transcript.track.trackId}>
+                {transcript.track.languageLabel}
+              </option>
+            )}
+            {s.tracks.map((track) => (
+              <option key={track.trackId} value={track.trackId}>
+                {track.languageLabel} (
+                {track.kind === "manual"
                   ? s.tr("transcript.tracks.manual")
-                  : tr.kind === "asr"
+                  : track.kind === "asr"
                     ? s.tr("transcript.tracks.asr")
                     : s.tr("transcript.tracks.translated")}
                 )
               </option>
             ))}
           </select>
-        </div>
 
-        <div className="toolbar">
-          <button
-            className="btn"
-            aria-pressed={s.viewMode === "paragraph"}
-            onClick={() =>
-              s.setViewMode(s.viewMode === "paragraph" ? "raw" : "paragraph")
-            }
+          <div
+            className="view-toggle"
+            role="group"
+            aria-label={s.tr("transcript.segments", {
+              count: transcript.segments.length,
+            })}
           >
-            {s.viewMode === "paragraph"
-              ? s.tr("transcript.view.paragraph")
-              : s.tr("transcript.view.raw")}
-          </button>
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={s.viewMode === "paragraph"}
+              onClick={() => s.setViewMode("paragraph")}
+            >
+              {s.tr("transcript.view.paragraph")}
+            </button>
+            <button
+              type="button"
+              className="btn"
+              aria-pressed={s.viewMode === "raw"}
+              onClick={() => s.setViewMode("raw")}
+            >
+              {s.tr("transcript.view.raw")}
+            </button>
+          </div>
           <button
+            type="button"
             className="btn"
             aria-pressed={s.follow}
             onClick={() => s.setFollow(!s.follow)}
           >
             {s.tr("transcript.follow")}
           </button>
-          <button
-            className="btn"
-            onClick={() =>
-              void navigator.clipboard.writeText(
-                copyPlainText(transcript.segments),
-              )
-            }
-          >
-            {s.tr("transcript.copy.text")}
-          </button>
-          <button
-            className="btn"
-            onClick={() =>
-              void navigator.clipboard.writeText(
-                copyWithTimestamps(transcript.segments),
-              )
-            }
-          >
-            {s.tr("transcript.copy.timestamps")}
-          </button>
-          <select
-            aria-label={s.tr("transcript.export")}
-            value=""
-            onChange={(e) => {
-              if (e.target.value) doExport(e.target.value);
-              e.target.value = "";
-            }}
-          >
-            <option value="">{s.tr("transcript.export")}</option>
-            <option value="txt">{s.tr("transcript.export.txt")}</option>
-            <option value="md">{s.tr("transcript.export.md")}</option>
-            <option value="srt">{s.tr("transcript.export.srt")}</option>
-            <option value="vtt">{s.tr("transcript.export.vtt")}</option>
-            <option value="json">{s.tr("transcript.export.json")}</option>
-          </select>
-          {s.videoId && !s.savedVideoIds.has(s.videoId) && (
-            <button
-              className="btn"
-              onClick={() => void s.saveCurrentToLibrary()}
-            >
-              {s.tr("library.save")}
-            </button>
-          )}
-          <button
-            className="btn"
-            type="button"
-            onClick={() => {
-              const text = window.prompt(s.tr("notes.placeholder"));
-              if (!text?.trim() || !transcript) return;
-              void bus.request("notes.upsert", {
-                id: crypto.randomUUID(),
-                videoId: transcript.video.videoId,
-                transcriptId: transcript.id,
-                text: text.trim(),
-                startMs: s.playbackMs,
-              });
-            }}
-          >
-            {s.tr("notes.add")}
-          </button>
+          <details className="action-menu">
+            <summary className="btn">{s.tr("transcript.actions")}</summary>
+            <div className="action-popover">
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  void navigator.clipboard.writeText(
+                    copyPlainText(transcript.segments),
+                  )
+                }
+              >
+                {s.tr("transcript.copy.text")}
+              </button>
+              <button
+                type="button"
+                className="btn"
+                onClick={() =>
+                  void navigator.clipboard.writeText(
+                    copyWithTimestamps(transcript.segments),
+                  )
+                }
+              >
+                {s.tr("transcript.copy.timestamps")}
+              </button>
+              {s.videoId && !s.savedVideoIds.has(s.videoId) && (
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => void s.saveCurrentToLibrary()}
+                >
+                  {s.tr("library.save")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  const text = window.prompt(s.tr("notes.placeholder"));
+                  if (!text?.trim()) return;
+                  void bus.request("notes.upsert", {
+                    id: crypto.randomUUID(),
+                    videoId: transcript.video.videoId,
+                    transcriptId: transcript.id,
+                    text: text.trim(),
+                    startMs: s.playbackMs,
+                  });
+                }}
+              >
+                {s.tr("notes.add")}
+              </button>
+              <label htmlFor="transcript-export">
+                {s.tr("transcript.export")}
+              </label>
+              <select
+                id="transcript-export"
+                value=""
+                onChange={(e) => {
+                  if (e.target.value) doExport(e.target.value);
+                  e.target.value = "";
+                }}
+              >
+                <option value="">{s.tr("transcript.export")}</option>
+                <option value="txt">{s.tr("transcript.export.txt")}</option>
+                <option value="md">{s.tr("transcript.export.md")}</option>
+                <option value="srt">{s.tr("transcript.export.srt")}</option>
+                <option value="vtt">{s.tr("transcript.export.vtt")}</option>
+                <option value="json">{s.tr("transcript.export.json")}</option>
+              </select>
+            </div>
+          </details>
         </div>
       </div>
 
-      <div ref={parentRef} style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+      <div className="transcript-summary" role="status" aria-live="polite">
+        <span>
+          {s.searchQuery.trim()
+            ? s.tr("transcript.search.results", { count: filtered.length })
+            : s.tr("transcript.segments", {
+                count: transcript.segments.length,
+              })}
+        </span>
+        {!s.follow && s.playbackMs > 0 && (
+          <button
+            type="button"
+            className="text-action"
+            onClick={() => {
+              const idx = filtered.findIndex(
+                (seg) =>
+                  s.playbackMs >= seg.startMs && s.playbackMs < seg.endMs,
+              );
+              if (idx >= 0) virtualizer.scrollToIndex(idx, { align: "center" });
+            }}
+          >
+            {s.tr("transcript.jumpToNow")}
+          </button>
+        )}
+      </div>
+
+      <div
+        ref={parentRef}
+        className="transcript-scroll"
+        role="region"
+        aria-label={s.tr("nav.transcript")}
+      >
+        {itemCount === 0 && (
+          <div className="no-results">{s.tr("transcript.search.empty")}</div>
+        )}
         <div
-          style={{ height: virtualizer.getTotalSize(), position: "relative" }}
+          className="transcript-list"
+          style={{ height: virtualizer.getTotalSize() }}
         >
           {virtualizer.getVirtualItems().map((vi) => {
             const style: React.CSSProperties = {
@@ -388,7 +475,11 @@ export function TranscriptView() {
                   ref={virtualizer.measureElement}
                   data-index={vi.index}
                 >
-                  <button className="ts" onClick={() => void s.seek(p.startMs)}>
+                  <button
+                    className="ts"
+                    aria-current={active ? "true" : undefined}
+                    onClick={() => void s.seek(p.startMs)}
+                  >
                     {formatTimestamp(p.startMs)}
                   </button>
                   <HighlightedText text={p.text} ranges={paraRanges} />
@@ -407,6 +498,7 @@ export function TranscriptView() {
                 style={style}
                 ref={virtualizer.measureElement}
                 data-index={vi.index}
+                aria-current={active ? "true" : undefined}
                 onClick={(e) => {
                   if (e.altKey && transcript) {
                     const id = crypto.randomUUID();
@@ -417,7 +509,7 @@ export function TranscriptView() {
                         transcriptId: transcript.id,
                         startMs: seg.startMs,
                         endMs: seg.endMs,
-                        color: "var(--accent)",
+                        color: "var(--ui-accent)",
                         createdAt: Date.now(),
                       })
                       .then(() =>
@@ -427,7 +519,6 @@ export function TranscriptView() {
                   }
                   void s.seek(seg.startMs);
                 }}
-                title={s.tr("highlights.add")}
               >
                 <span className="ts">{formatTimestamp(seg.startMs)}</span>
                 <span>
