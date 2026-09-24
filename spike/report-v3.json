@@ -1,0 +1,54 @@
+[
+  {
+    "id": "jNQXAC9IVRw",
+    "note": "manual en+de",
+    "result": {
+      "url": "https://www.youtube.com/watch?v=jNQXAC9IVRw",
+      "hasPlayer": true,
+      "botCheck": false,
+      "static": {
+        "playabilityStatus": "OK",
+        "trackCount": 2,
+        "tracks": [
+          {
+            "lang": "en",
+            "kind": "manual"
+          },
+          {
+            "lang": "de",
+            "kind": "manual"
+          }
+        ]
+      },
+      "c1": [
+        {
+          "status": 200,
+          "bytes": 0
+        }
+      ],
+      "c3b": [
+        {
+          "lang": "en",
+          "kind": "manual",
+          "cuesVisible": true,
+          "captures": []
+        },
+        {
+          "lang": "de",
+          "kind": "manual",
+          "cuesVisible": true,
+          "captures": [
+            {
+              "via": "xhr",
+              "status": 200,
+              "bytes": 683,
+              "hasPot": true,
+              "sample": "{\n  \"wireMagic\": \"pb3\",\n  \"pens\": [ {\n  \n  } ],\n  \"wsWinStyles\": [ {\n  \n  } ],\n  \"wpWinPositions\": ["
+            }
+          ]
+        }
+      ],
+      "playerStateAfterPlay": 1
+    }
+  }
+]

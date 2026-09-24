@@ -1,0 +1,45 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": ".",
+    "baseUrl": ".",
+    "paths": {
+      "@/core/*": ["./src/core/*"],
+      "@/providers/*": ["./src/providers/*"],
+      "@/platform/*": ["./src/platform/*"],
+      "@/storage/*": ["./src/storage/*"],
+      "@/ai/*": ["./src/ai/*"],
+      "@/ui/*": ["./src/ui/*"],
+      "@/background/*": ["./src/background/*"],
+      "@/test/*": ["./test/*"]
+    }
+  },
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "scripts/**/*.mjs",
+    "*.config.ts",
+    ".wxt/**/*.d.ts"
+  ],
+  "exclude": ["node_modules", "dist", ".output"]
+}
