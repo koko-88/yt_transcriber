@@ -39,6 +39,7 @@ Planning pass only. Nothing was implemented, built, tested, or submitted. The wo
 Revision 2 re-examined eight review issues and the whole plan for internal consistency. Part A records the assessment, Part B lists problems found independently, Part C is the complete revised plan, Part D is the decision register, Part E is the M0 validation matrix, Part F is the consistency check.
 
 Status labels used everywhere:
+
 - FINAL: decided on current evidence; changing it needs new evidence, not a spike.
 - PROVISIONAL: default chosen; an M0 item confirms or flips it with a stated rule.
 - OPEN: no default; needs product-owner input or M0 output before implementation of the affected milestone.
@@ -260,6 +261,7 @@ Positioning: "The private transcript workspace for YouTube: your data stays on y
 ## 8. Open-source repository audit (ANcpLua/yt-transcript, MIT, v3.3.0)
 
 Unchanged from revision 1 in substance:
+
 - Scope: a generic media-page tool with a YouTube fallback adapter.
 - Extraction ladder L0–L5: activeTab injection, TextTrack, network interception, parsers, then the YouTube adapter. The adapter makes an in-page `POST /youtubei/v1/player` with spoofed ANDROID_VR/IOS contexts; there is also a background InnerTube cycle that strips `exp=xpe` and sets ineffective User-Agent headers.
 - Build and permissions: three hand-maintained manifests; broad optional host permissions; global fetch/XHR monkeypatching.
@@ -650,6 +652,7 @@ Only FINAL items from Part D are frozen: D01, D03, D04a, D05a, D06a, D07, D09a, 
 ## 35. Final recommended next step
 
 Approve revision 2, then answer D32 (name/domain) and D19b (Strict default). After that, run M0 in a separate pass in this order:
+
 1. M0-A acquisition, which gates M2 and the positioning claim.
 2. M0-C permissions and injection, and M0-D AI connectivity.
 3. The rest in parallel.

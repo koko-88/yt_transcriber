@@ -1,16 +1,18 @@
 // AI layer types.
 
-export type AiPipeline = 'summary' | 'takeaways' | 'chapters' | 'qa';
+import type { Transcript } from "../core/model.js";
+
+export type AiPipeline = "summary" | "takeaways" | "chapters" | "qa";
 
 export interface ChatMessage {
-  role: 'system' | 'user';
+  role: "system" | "user";
   content: string;
 }
 
 export interface AiRunRequest {
   pipeline: AiPipeline;
-  /** Transcript ID to run against (background loads from IDB). */
-  transcriptId: string;
+  /** The transcript to analyse. Passed inline so the panel never has to persist it. */
+  transcript: Transcript;
   providerId: string;
   model: string;
   /** Question text for the qa pipeline. */

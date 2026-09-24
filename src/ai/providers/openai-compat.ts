@@ -1,11 +1,11 @@
 // OpenAI-compatible chat completions client (OpenAI, OpenRouter, Groq,
 // Mistral, Ollama, LM Studio). Runs in the background service worker.
 
-import { gatedFetch } from '../../platform/network.js';
-import { AppError } from '../../core/errors.js';
-import type { Secret } from '../../core/secret.js';
-import type { ChatMessage } from '../types.js';
-import { z } from 'zod';
+import { gatedFetch, readJsonBounded } from "../../platform/network.js";
+import { AppError } from "../../core/errors.js";
+import type { Secret } from "../../core/secret.js";
+import type { ChatMessage } from "../types.js";
+import { z } from "zod";
 
 const ChatResponseSchema = z.object({
   choices: z
@@ -24,11 +24,13 @@ export async function chatCompletion(opts: {
   secret: Secret | null;
   maxTokens?: number;
 }): Promise<string> {
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (opts.secret) headers['Authorization'] = `Bearer ${opts.secret.expose()}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+  };
+  if (opts.secret) headers["Authorization"] = `Bearer ${opts.secret.expose()}`;
 
   const res = await gatedFetch(`${opts.baseUrl}/chat/completions`, {
-    method: 'POST',
+    method: "POST",
     headers,
     body: JSON.stringify({
       model: opts.model,
@@ -42,12 +44,19 @@ export async function chatCompletion(opts: {
   if (!res.ok) {
     throw mapHttpError(res.status, await safeBody(res));
   }
-  const parsed = ChatResponseSchema.safeParse(await res.json());
+  const parsed = ChatResponseSchema.safeParse(await readJsonBounded(res));
   if (!parsed.success) {
-    throw new AppError({ code: 'AI_MODEL', message: 'Malformed provider response' });
+    throw new AppError({
+      code: "AI_MODEL",
+      message: "Malformed provider response",
+    });
   }
   const content = parsed.data.choices[0]!.message.content;
-  if (!content) throw new AppError({ code: 'AI_MODEL', message: 'Empty provider response' });
+  if (!content)
+    throw new AppError({
+      code: "AI_MODEL",
+      message: "Empty provider response",
+    });
   return content;
 }
 
@@ -55,7 +64,7 @@ async function safeBody(res: Response): Promise<string> {
   try {
     return (await res.text()).slice(0, 300);
   } catch {
-    return '';
+    return "";
   }
 }
 
@@ -65,35 +74,38 @@ export function mapHttpError(status: number, body: string): AppError {
     case 401:
     case 403:
       return new AppError({
-        code: 'AI_AUTH',
-        message: 'Provider rejected the API key',
+        code: "AI_AUTH",
+        message: "Provider rejected the API key",
         retryable: false,
       });
     case 429:
       return new AppError({
-        code: 'AI_RATE_LIMIT',
-        message: 'Provider rate limit reached — try again later',
+        code: "AI_RATE_LIMIT",
+        message: "Provider rate limit reached — try again later",
         retryable: true,
-        userMessageKey: 'errors.AI_RATE_LIMIT',
+        userMessageKey: "errors.AI_RATE_LIMIT",
       });
     case 400:
       if (/context|token|length/i.test(body)) {
         return new AppError({
-          code: 'AI_CONTEXT_TOO_LARGE',
-          message: 'Transcript too large for this model',
+          code: "AI_CONTEXT_TOO_LARGE",
+          message: "Transcript too large for this model",
           retryable: false,
         });
       }
-      return new AppError({ code: 'AI_MODEL', message: `Bad request: ${body}` });
+      return new AppError({
+        code: "AI_MODEL",
+        message: `Bad request: ${body}`,
+      });
     case 404:
       return new AppError({
-        code: 'AI_MODEL',
-        message: 'Model not found — check the model name',
+        code: "AI_MODEL",
+        message: "Model not found — check the model name",
         retryable: false,
       });
     default:
       return new AppError({
-        code: 'AI_NETWORK',
+        code: "AI_NETWORK",
         message: `Provider error (HTTP ${status})`,
         retryable: status >= 500,
       });

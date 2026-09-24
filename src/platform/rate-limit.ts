@@ -15,7 +15,10 @@ class RateLimiter {
     for (;;) {
       const now = Date.now();
       const elapsed = now - this.lastRefill;
-      this.tokens = Math.min(this.capacity, this.tokens + (elapsed * this.refillPerMinute) / 60_000);
+      this.tokens = Math.min(
+        this.capacity,
+        this.tokens + (elapsed * this.refillPerMinute) / 60_000,
+      );
       this.lastRefill = now;
       if (this.tokens >= 1) {
         this.tokens -= 1;

@@ -1,0 +1,65 @@
+name: Bug report
+description: Something in the extension does not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please do not include API keys, private video URLs or transcript contents
+        you are not comfortable sharing publicly. Security issues belong in a
+        private advisory, not here.
+  - type: input
+    id: version
+    attributes:
+      label: Extension version
+      placeholder: e.g. 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Edge
+        - Brave
+        - Firefox
+        - Other Chromium
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Transcript acquisition
+        - Search / navigation
+        - Export
+        - Library
+        - AI / provider setup
+        - Settings, theme or RTL
+        - Build or tooling
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open a video with manual captions
+        2. Open the panel
+        3. See availability state "…"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Diagnostics (Settings → Copy diagnostics)
+      description: Redacted log output; safe to paste.
+      render: text

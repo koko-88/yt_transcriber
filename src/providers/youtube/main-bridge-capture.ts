@@ -2,8 +2,8 @@
 // responses for /api/timedtext and forwards them to the ISOLATED world.
 // Never constructs requests itself.
 
-import type { BridgeEvent } from './bridge-protocol.js';
-import { BRIDGE_NS } from './bridge-protocol.js';
+import type { BridgeEvent } from "./bridge-protocol.js";
+import { BRIDGE_NS } from "./bridge-protocol.js";
 
 export type CapturePost = (msg: BridgeEvent) => void;
 
@@ -12,32 +12,48 @@ let origFetch: typeof window.fetch | null = null;
 let origXhrOpen: typeof XMLHttpRequest.prototype.open | null = null;
 let origXhrSend: typeof XMLHttpRequest.prototype.send | null = null;
 
-export function installCapture(post: CapturePost, getNonce: () => string | null): void {
+export function installCapture(
+  post: CapturePost,
+  getNonce: () => string | null,
+): void {
   if (captureInstalled) return;
   captureInstalled = true;
 
   origFetch = window.fetch;
   window.fetch = function (this: unknown, ...args: Parameters<typeof fetch>) {
     const raw = args[0];
-    const url = typeof raw === 'string' ? raw : raw instanceof Request ? raw.url : '';
+    const url =
+      typeof raw === "string" ? raw : raw instanceof Request ? raw.url : "";
     const promise = (origFetch as typeof fetch).apply(this as never, args);
     const nonce = getNonce();
-    if (url.includes('/api/timedtext') && nonce) {
+    if (url.includes("/api/timedtext") && nonce) {
       promise
         .then((res) => {
           try {
-            const contentType = res.headers.get('content-type') ?? undefined;
+            const contentType = res.headers.get("content-type") ?? undefined;
             void res
               .clone()
               .text()
               .then((body) => {
-                const payload: { url: string; status: number; body: string; contentType?: string } = {
+                const payload: {
+                  url: string;
+                  status: number;
+                  body: string;
+                  contentType?: string;
+                } = {
                   url: url.slice(0, 4096),
                   status: res.status,
-                  body: body.length > 30_000_000 ? '' : body,
+                  body: body.length > 30_000_000 ? "" : body,
                 };
-                if (contentType) payload.contentType = contentType.slice(0, 200);
-                post({ ns: BRIDGE_NS, dir: 'evt', nonce, kind: 'timedtext-response', payload });
+                if (contentType)
+                  payload.contentType = contentType.slice(0, 200);
+                post({
+                  ns: BRIDGE_NS,
+                  dir: "evt",
+                  nonce,
+                  kind: "timedtext-response",
+                  payload,
+                });
               })
               .catch(() => undefined);
           } catch {
@@ -52,24 +68,38 @@ export function installCapture(post: CapturePost, getNonce: () => string | null)
   type TtXhr = XMLHttpRequest & { __yttTt?: string };
   origXhrOpen = XMLHttpRequest.prototype.open;
   origXhrSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.open = function (this: TtXhr, method: string, url: string | URL, ...rest: unknown[]) {
+  XMLHttpRequest.prototype.open = function (
+    this: TtXhr,
+    method: string,
+    url: string | URL,
+    ...rest: unknown[]
+  ) {
     const u = String(url);
-    if (u.includes('/api/timedtext')) this.__yttTt = u.slice(0, 4096);
+    if (u.includes("/api/timedtext")) this.__yttTt = u.slice(0, 4096);
     else delete this.__yttTt;
-    return (origXhrOpen as (...a: unknown[]) => void).call(this, method, url, ...rest);
+    return (origXhrOpen as (...a: unknown[]) => void).call(
+      this,
+      method,
+      url,
+      ...rest,
+    );
   } as typeof XMLHttpRequest.prototype.open;
   XMLHttpRequest.prototype.send = function (this: TtXhr, ...args: unknown[]) {
     const tt = this.__yttTt;
     const nonce = getNonce();
     if (tt && nonce) {
-      this.addEventListener('load', () => {
+      this.addEventListener("load", () => {
         try {
           post({
             ns: BRIDGE_NS,
-            dir: 'evt',
+            dir: "evt",
             nonce,
-            kind: 'timedtext-response',
-            payload: { url: tt, status: this.status, body: (this.responseText ?? '').slice(0, 30_000_000) },
+            kind: "timedtext-response",
+            payload: {
+              url: tt,
+              status: this.status,
+              body: (this.responseText ?? "").slice(0, 30_000_000),
+            },
           });
         } catch {
           /* ignore */

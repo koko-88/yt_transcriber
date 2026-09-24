@@ -3,10 +3,10 @@
 // It is the single source of truth for transcript shapes across all contexts.
 
 /** Identifies the content provider */
-export type Provider = 'youtube';
+export type Provider = "youtube";
 
 /** Live broadcast state of a video */
-export type LiveState = 'none' | 'live' | 'upcoming' | 'post-live';
+export type LiveState = "none" | "live" | "upcoming" | "post-live";
 
 /** Video metadata captured from the page */
 export interface VideoMetadata {
@@ -30,7 +30,7 @@ export interface Chapter {
 }
 
 /** The kind of caption track */
-export type TrackKind = 'manual' | 'asr' | 'translated';
+export type TrackKind = "manual" | "asr" | "translated";
 
 /** A caption track available for a video */
 export interface TranscriptTrack {
@@ -55,13 +55,13 @@ export interface TranscriptSegment {
 
 /** The method used to acquire the transcript */
 export type AcquisitionMethod =
-  | 'yt-static-url'
-  | 'yt-player-url'
-  | 'yt-player-observed'
-  | 'yt-transcript-panel';
+  | "yt-static-url"
+  | "yt-player-url"
+  | "yt-player-observed"
+  | "yt-transcript-panel";
 
 /** The format of the raw caption data */
-export type CaptionFormat = 'json3' | 'srv3' | 'vtt';
+export type CaptionFormat = "json3" | "srv3" | "vtt";
 
 /** Source information for the acquisition */
 export interface TranscriptSource {
@@ -97,14 +97,4 @@ export interface Paragraph {
 /** Build a transcript ID from its components */
 export function makeTranscriptId(videoId: string, trackId: string): string {
   return `youtube:${videoId}:${trackId}`;
-}
-
-/** Extract videoId from a transcript ID */
-export function parseTranscriptId(id: string): { videoId: string; trackId: string } | null {
-  const parts = id.split(':');
-  if (parts.length < 3 || parts[0] !== 'youtube') return null;
-  const videoId = parts[1];
-  const trackId = parts.slice(2).join(':');
-  if (!videoId || !trackId) return null;
-  return { videoId, trackId };
 }

@@ -1,9 +1,9 @@
 // Logger — redacting ring-buffer logger per plan section 27
 // Secret values are never logged. Ring buffer holds last 500 events.
 
-import { Secret } from './secret';
+import { Secret } from "./secret";
 
-export type LogLevel = 'debug' | 'info' | 'warn' | 'error';
+export type LogLevel = "debug" | "info" | "warn" | "error";
 
 interface LogEntry {
   readonly timestamp: number;
@@ -23,22 +23,38 @@ class Logger {
     this.debugEnabled = enabled;
   }
 
-  debug(source: string, message: string, context?: Record<string, unknown>): void {
+  debug(
+    source: string,
+    message: string,
+    context?: Record<string, unknown>,
+  ): void {
     if (this.debugEnabled) {
-      this.log('debug', source, message, context);
+      this.log("debug", source, message, context);
     }
   }
 
-  info(source: string, message: string, context?: Record<string, unknown>): void {
-    this.log('info', source, message, context);
+  info(
+    source: string,
+    message: string,
+    context?: Record<string, unknown>,
+  ): void {
+    this.log("info", source, message, context);
   }
 
-  warn(source: string, message: string, context?: Record<string, unknown>): void {
-    this.log('warn', source, message, context);
+  warn(
+    source: string,
+    message: string,
+    context?: Record<string, unknown>,
+  ): void {
+    this.log("warn", source, message, context);
   }
 
-  error(source: string, message: string, context?: Record<string, unknown>): void {
-    this.log('error', source, message, context);
+  error(
+    source: string,
+    message: string,
+    context?: Record<string, unknown>,
+  ): void {
+    this.log("error", source, message, context);
   }
 
   /** Get the ring buffer contents for diagnostics */
@@ -51,10 +67,10 @@ class Logger {
     return this.ring
       .map((e) => {
         const time = new Date(e.timestamp).toISOString();
-        const ctx = e.context ? ` ${JSON.stringify(e.context)}` : '';
+        const ctx = e.context ? ` ${JSON.stringify(e.context)}` : "";
         return `[${time}] [${e.level}] [${e.source}] ${e.message}${ctx}`;
       })
-      .join('\n');
+      .join("\n");
   }
 
   /** Clear the ring buffer */
@@ -66,7 +82,7 @@ class Logger {
     level: LogLevel,
     source: string,
     message: string,
-    context?: Record<string, unknown>
+    context?: Record<string, unknown>,
   ): void {
     const sanitized = context ? this.redact(context) : undefined;
 
@@ -75,10 +91,8 @@ class Logger {
       level,
       source,
       message,
+      ...(sanitized === undefined ? {} : { context: sanitized }),
     };
-    if (sanitized !== undefined) {
-      (entry as any).context = sanitized;
-    }
 
     if (this.ring.length >= RING_SIZE) {
       this.ring.shift();
@@ -86,9 +100,14 @@ class Logger {
     this.ring.push(entry);
 
     // Also output to console in dev
-    if (typeof globalThis !== 'undefined' && this.debugEnabled) {
-      const consoleFn = level === 'error' ? console.error : level === 'warn' ? console.warn : console.log;
-      consoleFn(`[${source}] ${message}`, sanitized ?? '');
+    if (typeof globalThis !== "undefined" && this.debugEnabled) {
+      const consoleFn =
+        level === "error"
+          ? console.error
+          : level === "warn"
+            ? console.warn
+            : console.debug;
+      consoleFn(`[${source}] ${message}`, sanitized ?? "");
     }
   }
 
@@ -97,16 +116,20 @@ class Logger {
     const result: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(obj)) {
       if (Secret.isSecret(value)) {
-        result[key] = '[redacted]';
+        result[key] = "[redacted]";
       } else if (
-        key.toLowerCase().includes('key') ||
-        key.toLowerCase().includes('secret') ||
-        key.toLowerCase().includes('token') ||
-        key.toLowerCase().includes('password') ||
-        key.toLowerCase().includes('authorization')
+        key.toLowerCase().includes("key") ||
+        key.toLowerCase().includes("secret") ||
+        key.toLowerCase().includes("token") ||
+        key.toLowerCase().includes("password") ||
+        key.toLowerCase().includes("authorization")
       ) {
-        result[key] = '[redacted]';
-      } else if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        result[key] = "[redacted]";
+      } else if (
+        typeof value === "object" &&
+        value !== null &&
+        !Array.isArray(value)
+      ) {
         result[key] = this.redact(value as Record<string, unknown>);
       } else {
         result[key] = value;

@@ -1,7 +1,7 @@
 // Paragraph grouping — derived view from segments
 // Groups consecutive segments into readable paragraphs by pause duration
 
-import type { TranscriptSegment, Paragraph } from './model';
+import type { TranscriptSegment, Paragraph } from "./model";
 
 /** Default pause threshold (ms) between segments to start a new paragraph */
 const DEFAULT_PAUSE_MS = 1500;
@@ -13,7 +13,7 @@ const MAX_SEGMENTS_PER_PARA = 15;
  */
 export function toParagraphs(
   segments: readonly TranscriptSegment[],
-  pauseThresholdMs: number = DEFAULT_PAUSE_MS
+  pauseThresholdMs: number = DEFAULT_PAUSE_MS,
 ): Paragraph[] {
   if (segments.length === 0) return [];
 
@@ -38,7 +38,8 @@ export function toParagraphs(
 
     const prevSeg = segments[i - 1]!;
     const pause = seg.startMs - prevSeg.endMs;
-    const speakerChanged = seg.speaker !== undefined && seg.speaker !== currentSpeaker;
+    const speakerChanged =
+      seg.speaker !== undefined && seg.speaker !== currentSpeaker;
     const tooLong = currentTexts.length >= MAX_SEGMENTS_PER_PARA;
 
     if (pause > pauseThresholdMs || speakerChanged || tooLong) {
@@ -47,7 +48,7 @@ export function toParagraphs(
         index: paragraphs.length,
         startMs: currentStart,
         endMs: currentEnd,
-        text: currentTexts.join(' '),
+        text: currentTexts.join(" "),
         segmentRange: [currentSegStart, i - 1] as const,
         speaker: currentSpeaker,
       });
@@ -69,7 +70,7 @@ export function toParagraphs(
       index: paragraphs.length,
       startMs: currentStart,
       endMs: currentEnd,
-      text: currentTexts.join(' '),
+      text: currentTexts.join(" "),
       segmentRange: [currentSegStart, segments.length - 1] as const,
       speaker: currentSpeaker,
     });

@@ -2,38 +2,82 @@ name: CI
 
 on:
   push:
-    branches: [main, feature/v1-implementation]
+    branches: [main]
   pull_request:
+  workflow_dispatch:
+
+# Read-only by default; jobs that need more declare it explicitly.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-test:
+  verify:
+    name: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 24
           cache: npm
 
       - name: Install dependencies
-        run: npm ci
+        run: npm ci --ignore-scripts
 
       - name: Typecheck
-        run: npx tsc --noEmit
+        run: npm run compile
 
-      - name: Unit tests
-        run: npx vitest run
+      - name: Lint
+        run: npm run lint
 
-      - name: Build extension (Chrome MV3)
-        run: npx wxt build
+      - name: Format check
+        run: npm run format:check
 
-      - name: Zip build artifact
-        run: npx wxt zip
+      - name: Unit and integration tests
+        run: npm run test
 
-      - name: Upload artifact
+      - name: Build (Chromium)
+        run: npm run build
+
+      - name: Build (Firefox)
+        run: npm run build:firefox
+
+      - name: Bundle budgets
+        run: npm run check:bundle
+
+      - name: License check
+        run: npm run check:licenses
+
+      - name: Mozilla add-on lint
+        run: npm run web-ext:lint
+
+      - name: Dependency audit (runtime dependencies)
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Extension smoke test (E2E)
+        run: npm run test:e2e
+
+      - name: Package extension zips
+        run: npm run zip:all
+
+      - name: Checksums
+        run: npm run checksums
+
+      - name: Upload packages
         uses: actions/upload-artifact@v4
         with:
-          name: yt-transcriber-chrome-mv3
-          path: .output/*.zip
+          name: extension-packages
+          path: |
+            .output/*.zip
+            .output/SHA256SUMS.txt
+          if-no-files-found: error
           retention-days: 14

@@ -1,78 +1,117 @@
-import { describe, it, expect } from 'vitest';
-import { normalizeForSearch, searchSegments, bm25Retrieve } from '../src/core/search';
-import type { TranscriptSegment } from '../src/core/model';
+import { describe, it, expect } from "vitest";
+import {
+  normalizeForSearch,
+  searchSegments,
+  bm25Retrieve,
+} from "../src/core/search";
+import type { TranscriptSegment } from "../src/core/model";
 
-describe('normalizeForSearch', () => {
-  it('strips Latin diacritics and lowercases', () => {
-    expect(normalizeForSearch('Héllo WÖRLD')).toBe('hello world');
+describe("normalizeForSearch", () => {
+  it("strips Latin diacritics and lowercases", () => {
+    expect(normalizeForSearch("Héllo WÖRLD")).toBe("hello world");
   });
 
-  it('strips Arabic tashkeel and normalizes alef variants', () => {
+  it("strips Arabic tashkeel and normalizes alef variants", () => {
     // مُحَمَّد with diacritics -> محمد
-    expect(normalizeForSearch('مُحَمَّد')).toBe('محمد');
+    expect(normalizeForSearch("مُحَمَّد")).toBe("محمد");
     // أ إ آ -> ا
-    expect(normalizeForSearch('أإآ')).toBe('ااا');
+    expect(normalizeForSearch("أإآ")).toBe("ااا");
   });
 
-  it('normalizes taa marbuta to haa', () => {
-    expect(normalizeForSearch('مدرسة')).toBe('مدرسه');
+  it("normalizes taa marbuta to haa", () => {
+    expect(normalizeForSearch("مدرسة")).toBe("مدرسه");
   });
 
-  it('collapses whitespace', () => {
-    expect(normalizeForSearch('  a   b\n c ')).toBe('a b c');
+  it("collapses whitespace", () => {
+    expect(normalizeForSearch("  a   b\n c ")).toBe("a b c");
   });
 });
 
-describe('searchSegments', () => {
+describe("searchSegments", () => {
   const segments: TranscriptSegment[] = [
-    { startMs: 0, endMs: 1000, text: 'The quick brown fox' },
-    { startMs: 1000, endMs: 2000, text: 'jumps over the lazy dog' },
-    { startMs: 2000, endMs: 3000, text: 'مرحبا بالعالم' },
+    { startMs: 0, endMs: 1000, text: "The quick brown fox" },
+    { startMs: 1000, endMs: 2000, text: "jumps over the lazy dog" },
+    { startMs: 2000, endMs: 3000, text: "مرحبا بالعالم" },
   ];
 
-  it('finds case-insensitive substring matches', () => {
-    const results = searchSegments(segments, 'QUICK');
+  it("finds case-insensitive substring matches", () => {
+    const results = searchSegments(segments, "QUICK");
     expect(results).toHaveLength(1);
-    expect(results[0]!.segment.text).toBe('The quick brown fox');
+    expect(results[0]!.segment.text).toBe("The quick brown fox");
   });
 
-  it('returns empty for empty query', () => {
-    expect(searchSegments(segments, '   ')).toHaveLength(0);
+  it("returns empty for empty query", () => {
+    expect(searchSegments(segments, "   ")).toHaveLength(0);
   });
 
-  it('matches Arabic text with diacritic-insensitive query', () => {
+  it("matches Arabic text with diacritic-insensitive query", () => {
     const withTashkeel: TranscriptSegment[] = [
-      { startMs: 0, endMs: 1000, text: 'مَرْحَبًا بِالْعَالَمِ' },
+      { startMs: 0, endMs: 1000, text: "مَرْحَبًا بِالْعَالَمِ" },
     ];
-    const results = searchSegments(withTashkeel, 'مرحبا');
+    const results = searchSegments(withTashkeel, "مرحبا");
     expect(results).toHaveLength(1);
   });
 
-  it('returns no matches for absent text', () => {
-    expect(searchSegments(segments, 'zebra')).toHaveLength(0);
+  it("returns no matches for absent text", () => {
+    expect(searchSegments(segments, "zebra")).toHaveLength(0);
   });
 });
 
-describe('bm25Retrieve', () => {
+describe("bm25Retrieve", () => {
   const segments: TranscriptSegment[] = [
-    { startMs: 0, endMs: 1000, text: 'machine learning models train on data' },
-    { startMs: 1000, endMs: 2000, text: 'the weather is nice today' },
-    { startMs: 2000, endMs: 3000, text: 'neural networks are machine learning models' },
-    { startMs: 3000, endMs: 4000, text: 'cooking pasta requires boiling water' },
+    { startMs: 0, endMs: 1000, text: "machine learning models train on data" },
+    { startMs: 1000, endMs: 2000, text: "the weather is nice today" },
+    {
+      startMs: 2000,
+      endMs: 3000,
+      text: "neural networks are machine learning models",
+    },
+    {
+      startMs: 3000,
+      endMs: 4000,
+      text: "cooking pasta requires boiling water",
+    },
   ];
 
-  it('ranks relevant segments first', () => {
-    const results = bm25Retrieve(segments, 'machine learning', 2);
-    expect(results.length).toBe(2);
-    expect(results[0]!.text).toContain('machine learning');
+  it("ranks relevant segments first", () => {
+    const results = bm25Retrieve(segments, "machine learning", 2);
+    expect(results).toHaveLength(2);
+    expect(results[0]!.text).toContain("machine learning");
   });
 
-  it('returns empty for empty query', () => {
-    expect(bm25Retrieve(segments, '', 5)).toHaveLength(0);
+  it("returns empty for empty query", () => {
+    expect(bm25Retrieve(segments, "", 5)).toHaveLength(0);
   });
 
-  it('respects topK', () => {
-    const results = bm25Retrieve(segments, 'the', 1);
-    expect(results.length).toBeLessThanOrEqual(1);
+  it("respects topK", () => {
+    const results = bm25Retrieve(segments, "the", 1);
+    expect(results).toHaveLength(1);
+  });
+
+  it("returns empty for an empty segment list", () => {
+    expect(bm25Retrieve([], "anything", 5)).toEqual([]);
+  });
+});
+
+describe("search normalization reuse", () => {
+  const cached = [
+    { index: 0, startMs: 0, endMs: 1000, text: "الذكاء الاصطناعي" },
+    { index: 1, startMs: 1000, endMs: 2000, text: "Machine Learning Basics" },
+  ] as const satisfies readonly TranscriptSegment[];
+
+  it("returns stable matching and highlight data for repeated searches", () => {
+    const first = searchSegments(cached, "الذكاء");
+    const second = searchSegments(cached, "الذكاء");
+    expect(second.map((result) => result.segment.index)).toEqual(
+      first.map((result) => result.segment.index),
+    );
+    expect(first).toHaveLength(1);
+    expect(first[0]!.matchRanges.length).toBeGreaterThan(0);
+  });
+
+  it("handles a fresh array instance and still matches case-insensitively", () => {
+    const copy: TranscriptSegment[] = cached.map((segment) => ({ ...segment }));
+    expect(searchSegments(copy, "MACHINE")).toHaveLength(1);
+    expect(bm25Retrieve(copy, "machine learning", 5)).toHaveLength(1);
   });
 });

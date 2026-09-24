@@ -3,10 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' https://i.ytimg.com https://*.ytimg.com data:"
-    />
+    <!-- The authoritative CSP is the manifest's extension_pages policy
+         (script-src/object-src/connect-src). A second meta policy here would
+         silently intersect with it, so it is intentionally omitted. -->
     <title>Transcript Workbench</title>
   </head>
   <body>

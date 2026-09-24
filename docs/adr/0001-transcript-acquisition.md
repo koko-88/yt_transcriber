@@ -2,7 +2,11 @@
 
 - Status: Accepted (M0-A, 2026-09-24)
 - Deciders: engineering
-- Evidence: `spike/acquisition-spike.mjs` runs — `spike/report-v1.json` (media blocked), `spike/report.json` (v2, media allowed), `spike/report-v3.json` (v2 + `--disable-blink-features=AutomationControlled`)
+- Evidence: the M0-A headful acquisition spike ran against live YouTube with
+  Playwright (`spike/acquisition-spike.mjs`, reports `report-v1.json`,
+  `report.json`, `report-v3.json`). The spike and its raw reports were removed
+  from the tree once this decision was recorded; the findings below are the
+  durable record.
 
 ## Context
 
@@ -17,13 +21,13 @@ degradation. Candidate mechanisms:
 
 ## Evidence summary
 
-| Video | C1 static fetch | C2 tracklist | C3b capture |
-|---|---|---|---|
-| dQw4w9WgXcQ (manual+asr ×6) | HTTP 200, **0 bytes** | 5 tracks, **no baseUrl** | cues rendered once playback actually started |
-| jNQXAC9IVRw (manual en+de) | HTTP 200, **0 bytes** | 2 tracks, no baseUrl | XHR captured, `pot` in URL, **HTTP 200, 683 bytes, valid json3** (`wireMagic: pb3`) |
-| 9bZkp7q19f0 (ASR ko) | HTTP 200, **0 bytes** | unavailable | request observed with `pot`; empty body in flagged context |
-| eKFTSSKCzWA (no captions) | n/a (0 tracks) | n/a | n/a → `no-captions` |
-| Shorts URL (`/shorts/<id>`) | redirects to `/watch`; normal path applies | — | — |
+| Video                       | C1 static fetch                            | C2 tracklist             | C3b capture                                                                         |
+| --------------------------- | ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------- |
+| dQw4w9WgXcQ (manual+asr ×6) | HTTP 200, **0 bytes**                      | 5 tracks, **no baseUrl** | cues rendered once playback actually started                                        |
+| jNQXAC9IVRw (manual en+de)  | HTTP 200, **0 bytes**                      | 2 tracks, no baseUrl     | XHR captured, `pot` in URL, **HTTP 200, 683 bytes, valid json3** (`wireMagic: pb3`) |
+| 9bZkp7q19f0 (ASR ko)        | HTTP 200, **0 bytes**                      | unavailable              | request observed with `pot`; empty body in flagged context                          |
+| eKFTSSKCzWA (no captions)   | n/a (0 tracks)                             | n/a                      | n/a → `no-captions`                                                                 |
+| Shorts URL (`/shorts/<id>`) | redirects to `/watch`; normal path applies | —                        | —                                                                                   |
 
 Environment finding: in automation-flagged contexts (headless + automation
 flags), YouTube returns **HTTP 200 with empty bodies even for the player's own
@@ -36,7 +40,7 @@ must surface this as the retryable `fetch-empty` state.
 
 1. **Primary mechanism: C3b** — enable the target track through the official
    player API and capture the player's own timedtext **response body**
-   (fetch + XHR hooks installed *before* enabling the track). Never construct
+   (fetch + XHR hooks installed _before_ enabling the track). Never construct
    or refetch timedtext URLs ourselves: `pot` tokens are effectively
    single-use/context-bound, and refetches return empty 200s.
 2. **C1 retained as a cheap first attempt** (one fetch, no playback side

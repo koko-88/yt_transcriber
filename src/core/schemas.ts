@@ -2,9 +2,14 @@
 // Used for: message payloads, backup imports, MAIN-world bridge events (validated
 // in the ISOLATED world), and storage records on read.
 
-import { z } from 'zod';
+import { z } from "zod";
 
-export const LiveStateSchema = z.enum(['none', 'live', 'upcoming', 'post-live']);
+export const LiveStateSchema = z.enum([
+  "none",
+  "live",
+  "upcoming",
+  "post-live",
+]);
 
 export const ChapterSchema = z.object({
   title: z.string().max(500),
@@ -12,7 +17,7 @@ export const ChapterSchema = z.object({
 });
 
 export const VideoMetadataSchema = z.object({
-  provider: z.literal('youtube'),
+  provider: z.literal("youtube"),
   videoId: z.string().regex(/^[A-Za-z0-9_-]{6,20}$/),
   canonicalUrl: z.string().url().max(2048),
   title: z.string().max(1000),
@@ -25,7 +30,7 @@ export const VideoMetadataSchema = z.object({
   capturedAt: z.number(),
 });
 
-export const TrackKindSchema = z.enum(['manual', 'asr', 'translated']);
+export const TrackKindSchema = z.enum(["manual", "asr", "translated"]);
 
 export const TranscriptTrackSchema = z.object({
   trackId: z.string().min(1).max(200),
@@ -47,8 +52,13 @@ export const TranscriptSegmentSchema = z.object({
 });
 
 export const TranscriptSourceSchema = z.object({
-  method: z.enum(['yt-static-url', 'yt-player-url', 'yt-player-observed', 'yt-transcript-panel']),
-  format: z.enum(['json3', 'srv3', 'vtt']),
+  method: z.enum([
+    "yt-static-url",
+    "yt-player-url",
+    "yt-player-observed",
+    "yt-transcript-panel",
+  ]),
+  format: z.enum(["json3", "srv3", "vtt"]),
 });
 
 export const MAX_SEGMENTS = 100_000;
@@ -65,20 +75,20 @@ export const TranscriptSchema = z.object({
 });
 
 export const AvailabilitySchema = z.enum([
-  'available',
-  'no-captions',
-  'login-required',
-  'age-restricted',
-  'members-only',
-  'live-in-progress',
-  'upcoming',
-  'not-a-video-page',
-  'fetch-empty',
-  'needs-player-interaction',
-  'parse-failed',
-  'unsupported-page-structure',
-  'network-error',
-  'unknown',
+  "available",
+  "no-captions",
+  "login-required",
+  "age-restricted",
+  "members-only",
+  "live-in-progress",
+  "upcoming",
+  "not-a-video-page",
+  "fetch-empty",
+  "needs-player-interaction",
+  "parse-failed",
+  "unsupported-page-structure",
+  "network-error",
+  "unknown",
 ]);
 
 export const StageTraceSchema = z.object({
@@ -90,7 +100,7 @@ export const StageTraceSchema = z.object({
   httpStatus: z.number().int().optional(),
 });
 
-export const AcquisitionResultSchema = z.discriminatedUnion('ok', [
+export const AcquisitionResultSchema = z.discriminatedUnion("ok", [
   z.object({
     ok: z.literal(true),
     transcript: TranscriptSchema,

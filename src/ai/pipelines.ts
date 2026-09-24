@@ -1,10 +1,10 @@
 // AI pipelines: prompt construction from transcripts.
 // Versioning matters: cache keys include the prompt version.
 
-import type { Transcript } from '../core/model.js';
-import { copyPlainText } from '../core/export.js';
-import { bm25Retrieve } from '../core/search.js';
-import type { AiPipeline, ChatMessage } from './types.js';
+import type { Transcript } from "../core/model.js";
+import { copyPlainText } from "../core/export.js";
+import { bm25Retrieve } from "../core/search.js";
+import type { AiPipeline, ChatMessage } from "./types.js";
 
 export const PROMPT_VERSION = 1;
 
@@ -29,43 +29,46 @@ export function buildMessages(
   transcript: Transcript,
   question?: string,
 ): ChatMessage[] {
-  const text = transcriptText(transcript, pipeline === 'qa' ? 0 : MAX_CONTEXT_CHARS);
+  const text = transcriptText(
+    transcript,
+    pipeline === "qa" ? 0 : MAX_CONTEXT_CHARS,
+  );
   const title = transcript.video.title;
   const header = `Video: "${title}"\n\nTranscript:\n`;
 
   switch (pipeline) {
-    case 'summary':
+    case "summary":
       return [
-        { role: 'system', content: SYSTEM },
+        { role: "system", content: SYSTEM },
         {
-          role: 'user',
+          role: "user",
           content: `${header}${text}\n\nWrite a concise summary (max 200 words) of this video. Use the transcript's language for your answer.`,
         },
       ];
-    case 'takeaways':
+    case "takeaways":
       return [
-        { role: 'system', content: SYSTEM },
+        { role: "system", content: SYSTEM },
         {
-          role: 'user',
+          role: "user",
           content: `${header}${text}\n\nList the key takeaways as bullet points (5-10 items). Use the transcript's language for your answer.`,
         },
       ];
-    case 'chapters':
+    case "chapters":
       return [
-        { role: 'system', content: SYSTEM },
+        { role: "system", content: SYSTEM },
         {
-          role: 'user',
+          role: "user",
           content: `${header}${text}\n\nPropose chapter markers for this video. Format: one chapter per line as "MM:SS - Title". Use the transcript's language for chapter titles.`,
         },
       ];
-    case 'qa': {
-      const context = bm25Retrieve(transcript.segments, question ?? '', 12);
+    case "qa": {
+      const context = bm25Retrieve(transcript.segments, question ?? "", 12);
       const contextText = truncate(copyPlainText(context), QA_CONTEXT_CHARS);
       return [
-        { role: 'system', content: SYSTEM },
+        { role: "system", content: SYSTEM },
         {
-          role: 'user',
-          content: `Video: "${title}"\n\nRelevant transcript excerpts:\n${contextText}\n\nQuestion: ${question ?? ''}\n\nAnswer the question using only the excerpts above. Use the question's language for your answer.`,
+          role: "user",
+          content: `Video: "${title}"\n\nRelevant transcript excerpts:\n${contextText}\n\nQuestion: ${question ?? ""}\n\nAnswer the question using only the excerpts above. Use the question's language for your answer.`,
         },
       ];
     }

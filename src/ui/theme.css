@@ -12,11 +12,12 @@
   --accent-contrast: #ffffff;
   --danger: #c00;
   --radius: 8px;
-  --font: Roboto, 'Segoe UI', 'Noto Sans', 'Noto Sans Arabic', Arial, sans-serif;
+  --font:
+    Roboto, "Segoe UI", "Noto Sans", "Noto Sans Arabic", Arial, sans-serif;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root:not([data-theme='light']) {
+  :root:not([data-theme="light"]) {
     --bg: #0f0f0f;
     --bg-subtle: #1f1f1f;
     --bg-hover: #2a2a2a;
@@ -28,7 +29,7 @@
   }
 }
 
-:root[data-theme='dark'] {
+:root[data-theme="dark"] {
   --bg: #0f0f0f;
   --bg-subtle: #1f1f1f;
   --bg-hover: #2a2a2a;
@@ -77,7 +78,7 @@ body,
   cursor: pointer;
 }
 
-.tabbar button[aria-selected='true'] {
+.tabbar button[aria-selected="true"] {
   color: var(--accent);
   border-block-end-color: var(--accent);
   font-weight: 600;
@@ -101,7 +102,7 @@ body,
   line-height: 1.5;
 }
 
-.banner[data-tone='error'] {
+.banner[data-tone="error"] {
   border-color: var(--danger);
   color: var(--danger);
 }
@@ -113,10 +114,10 @@ body,
   align-items: center;
 }
 
-.toolbar input[type='search'],
+.toolbar input[type="search"],
 .toolbar select,
 .settings-row select,
-.settings-row input[type='text'],
+.settings-row input[type="text"],
 .ai-config input,
 .ai-config select {
   padding: 6px 8px;
@@ -128,7 +129,7 @@ body,
   min-width: 0;
 }
 
-.toolbar input[type='search'] {
+.toolbar input[type="search"] {
   flex: 1;
 }
 

@@ -13,7 +13,7 @@ export interface PermissionManager {
 export function originPattern(url: string): string | null {
   try {
     const u = new URL(url);
-    if (u.protocol !== 'https:' && u.protocol !== 'http:') return null;
+    if (u.protocol !== "https:" && u.protocol !== "http:") return null;
     return `${u.protocol}//${u.host}/*`;
   } catch {
     return null;
@@ -49,5 +49,10 @@ export function createPermissionManager(): PermissionManager {
     return perms.remove({ origins: [pattern] });
   }
 
-  return { ensureHostPermission, hasHostPermission, listGrantedHosts, removeHostPermission };
+  return {
+    ensureHostPermission,
+    hasHostPermission,
+    listGrantedHosts,
+    removeHostPermission,
+  };
 }

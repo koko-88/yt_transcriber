@@ -1,0 +1,58 @@
+﻿
+> yt-transcriber@1.0.0 web-ext:lint
+> web-ext lint --source-dir .output/firefox-mv2
+
+Validation Summary:
+
+errors          1              
+notices         0              
+warnings        3              
+
+ERRORS:
+
+Code                      Message       Description              File         
+MANIFEST_FIELD_REQUIRED   "/browser_…   See                      manifest.j…  
+                          specific_s…   https://mzl.la/1ZOhoEN   son          
+                          ettings/ge…   (MDN Docs) for more                   
+                          cko/data_c…   information.                          
+                          ollection_…                                         
+                          permission…                                         
+                          s" must                                             
+                          have                                                
+                          required                                            
+                          property                                            
+                          'required'                                          
+WARNINGS:
+
+Code                                  Message       Description              F
+KEY_FIREFOX_ANDROID_UNSUPPORTED_BY…   Manifest      "strict_min_version"     m
+_MIN_VERSION                          key not       requires Firefox for     s
+                                      supported     Android 140, which was    
+                                      by the        released before           
+                                      specified     version 142 introduced    
+                                      minimum       support for               
+                                      Firefox for   "browser_specific_set…    
+                                      Android       tings.gecko.data_coll…    
+                                      version       ection_permissions".      
+UNSAFE_VAR_ASSIGNMENT                 Unsafe        Due to both security     c
+                                      assignment    and performance          e
+                                      to            concerns, this may not   I
+                                      innerHTML     be set using dynamic      
+                                                    values which have not     
+                                                    been adequately           
+                                                    sanitized. This can       
+                                                    lead to security          
+                                                    issues or fairly          
+                                                    serious performance       
+                                                    degradation.              
+UNSAFE_VAR_ASSIGNMENT                 Unsafe        Due to both security     c
+                                      assignment    and performance          e
+                                      to            concerns, this may not   I
+                                      innerHTML     be set using dynamic      
+                                                    values which have not     
+                                                    been adequately           
+                                                    sanitized. This can       
+                                                    lead to security          
+                                                    issues or fairly          
+                                                    serious performance       
+                                                    degradation.              

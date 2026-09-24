@@ -1,11 +1,11 @@
 // Secret type — branded string whose serialization is always [redacted]
 // Per architecture plan section 22: secrets use a Secret type whose serialization is [redacted]
 
-const SECRET_BRAND = Symbol('Secret');
+const SECRET_BRAND = Symbol("Secret");
 
 /** A branded string type that redacts itself on serialization */
 export class Secret {
-  private readonly [SECRET_BRAND]: true = true;
+  private readonly [SECRET_BRAND] = true as const;
   private readonly value: string;
 
   constructor(value: string) {
@@ -19,17 +19,17 @@ export class Secret {
 
   /** Always returns [redacted] */
   toString(): string {
-    return '[redacted]';
+    return "[redacted]";
   }
 
   /** Always returns "[redacted]" */
   toJSON(): string {
-    return '[redacted]';
+    return "[redacted]";
   }
 
   /** Prevent accidental logging */
-  [Symbol.for('nodejs.util.inspect.custom')](): string {
-    return '[redacted]';
+  [Symbol.for("nodejs.util.inspect.custom")](): string {
+    return "[redacted]";
   }
 
   /** Check if a value is a Secret */

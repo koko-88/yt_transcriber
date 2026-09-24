@@ -2,7 +2,7 @@
 // window.postMessage with a per-session nonce, per-request ids, strict schema
 // validation of every inbound payload, and AbortSignal-based timeouts.
 
-import { z } from 'zod';
+import { z } from "zod";
 import {
   BRIDGE_NS,
   BridgeOpSchema,
@@ -12,16 +12,20 @@ import {
   type BridgeRequest,
   type PlayerSnapshot,
   type TimedTextCapture,
-} from './bridge-protocol.js';
-import { AppError } from '../../core/errors.js';
-import { logger } from '../../core/logger.js';
+} from "./bridge-protocol.js";
+import { AppError } from "../../core/errors.js";
+import { logger } from "../../core/logger.js";
 
 const HelloAckSchema = z.object({ ready: z.literal(true) });
 
 export interface BridgeClient {
   hello(): Promise<void>;
   getPlayerSnapshot(): Promise<PlayerSnapshot>;
-  enableTrack(payload: { languageCode: string; kind?: string; vssId?: string }): Promise<void>;
+  enableTrack(payload: {
+    languageCode: string;
+    kind?: string;
+    vssId?: string;
+  }): Promise<void>;
   restorePlayback(): Promise<void>;
   ensurePlaying(): Promise<void>;
   startCapture(): Promise<void>;
@@ -41,7 +45,7 @@ interface PendingReq {
 function makeNonce(): string {
   const buf = new Uint8Array(16);
   crypto.getRandomValues(buf);
-  return Array.from(buf, (b) => b.toString(16).padStart(2, '0')).join('');
+  return Array.from(buf, (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
 const OP_TIMEOUT_MS: Record<BridgeOp, number> = {
@@ -68,56 +72,92 @@ export function createBridgeClient(win: Window = window): BridgeClient {
     if (destroyed) return;
     if (ev.source !== win) return;
     const data = ev.data as unknown;
-    if (typeof data !== 'object' || data === null) return;
+    if (typeof data !== "object" || data === null) return;
     const m = data as Record<string, unknown>;
-    if (m['ns'] !== BRIDGE_NS) return;
-    if (m['nonce'] !== nonce) return;
+    if (m["ns"] !== BRIDGE_NS) return;
+    if (m["nonce"] !== nonce) return;
 
-    if (m['dir'] === 'res') {
-      const key = `${String(m['op'])}#${String(m['reqId'])}`;
+    if (m["dir"] === "res") {
+      const key = `${String(m["op"])}#${String(m["reqId"])}`;
       const p = pending.get(key);
       if (!p) return;
       pending.delete(key);
       clearTimeout(p.timer);
-      if (m['ok'] === true) p.resolve(m['data']);
-      else p.reject(new AppError({ code: 'ACQ_NO_RESPONSE', message: String(m['error'] ?? 'bridge-error'), retryable: true }));
+      if (m["ok"] === true) p.resolve(m["data"]);
+      else
+        p.reject(
+          new AppError({
+            code: "ACQ_NO_RESPONSE",
+            message: String(m["error"] ?? "bridge-error"),
+            retryable: true,
+          }),
+        );
       return;
     }
 
-    if (m['dir'] === 'evt' && m['kind'] === 'timedtext-response') {
-      const parsed = TimedTextCaptureSchema.safeParse(m['payload']);
+    if (m["dir"] === "evt" && m["kind"] === "timedtext-response") {
+      const parsed = TimedTextCaptureSchema.safeParse(m["payload"]);
       if (!parsed.success) {
-        logger.warn('bridge', 'dropped malformed timedtext event from MAIN world');
+        logger.warn(
+          "bridge",
+          "dropped malformed timedtext event from MAIN world",
+        );
         return;
       }
       for (const cb of ttCallbacks) cb(parsed.data);
     }
   }
 
-  win.addEventListener('message', onMessage);
+  win.addEventListener("message", onMessage);
 
   function request(op: BridgeOp, payload?: unknown): Promise<unknown> {
-    if (destroyed) return Promise.reject(new AppError({ code: 'ACQ_NO_PLAYER', message: 'bridge destroyed' }));
+    if (destroyed)
+      return Promise.reject(
+        new AppError({ code: "ACQ_NO_PLAYER", message: "bridge destroyed" }),
+      );
     const reqId = String(++reqCounter);
-    const msg: BridgeRequest & { reqId: string } = { ns: BRIDGE_NS, dir: 'req', nonce, op, reqId };
+    const msg: BridgeRequest & { reqId: string } = {
+      ns: BRIDGE_NS,
+      dir: "req",
+      nonce,
+      op,
+      reqId,
+    };
     if (payload !== undefined) msg.payload = payload;
 
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         pending.delete(`${op}#${reqId}`);
-        reject(new AppError({ code: 'ACQ_TIMEOUT', message: `bridge op ${op} timed out`, retryable: true }));
+        reject(
+          new AppError({
+            code: "ACQ_TIMEOUT",
+            message: `bridge op ${op} timed out`,
+            retryable: true,
+          }),
+        );
       }, OP_TIMEOUT_MS[op]);
       pending.set(`${op}#${reqId}`, { resolve, reject, timer });
       win.postMessage(msg, location.origin);
     });
   }
 
-  async function expect<T>(op: BridgeOp, schema: z.ZodType<T>, payload?: unknown): Promise<T> {
+  async function expect<T>(
+    op: BridgeOp,
+    schema: z.ZodType<T>,
+    payload?: unknown,
+  ): Promise<T> {
     const raw = await request(op, payload);
     const parsed = schema.safeParse(raw);
     if (!parsed.success) {
-      logger.warn('bridge', `schema mismatch on ${op} response — MAIN world untrusted data rejected`);
-      throw new AppError({ code: 'ACQ_NO_RESPONSE', message: `bridge ${op} returned malformed data`, retryable: true });
+      logger.warn(
+        "bridge",
+        `schema mismatch on ${op} response — MAIN world untrusted data rejected`,
+      );
+      throw new AppError({
+        code: "ACQ_NO_RESPONSE",
+        message: `bridge ${op} returned malformed data`,
+        retryable: true,
+      });
     }
     return parsed.data;
   }
@@ -126,31 +166,34 @@ export function createBridgeClient(win: Window = window): BridgeClient {
 
   return {
     async hello() {
-      await expect('hello', HelloAckSchema);
+      await expect("hello", HelloAckSchema);
     },
     async getPlayerSnapshot() {
-      return expect('getPlayerSnapshot', PlayerSnapshotSchema);
+      return expect("getPlayerSnapshot", PlayerSnapshotSchema);
     },
     async enableTrack(payload) {
-      await expect('enableTrack', emptyOk, payload);
+      await expect("enableTrack", emptyOk, payload);
     },
     async restorePlayback() {
-      await expect('restorePlayback', emptyOk);
+      await expect("restorePlayback", emptyOk);
     },
     async ensurePlaying() {
-      await expect('ensurePlaying', emptyOk);
+      await expect("ensurePlaying", emptyOk);
     },
     async startCapture() {
-      await expect('startCapture', emptyOk);
+      await expect("startCapture", emptyOk);
     },
     async stopCapture() {
-      await expect('stopCapture', emptyOk);
+      await expect("stopCapture", emptyOk);
     },
     async seek(seconds) {
-      await expect('seek', emptyOk, { seconds });
+      await expect("seek", emptyOk, { seconds });
     },
     async getPlaybackTime() {
-      return expect('getPlaybackTime', z.object({ timeSeconds: z.number(), playing: z.boolean() }));
+      return expect(
+        "getPlaybackTime",
+        z.object({ timeSeconds: z.number(), playing: z.boolean() }),
+      );
     },
     onTimedText(cb) {
       ttCallbacks.add(cb);
@@ -160,11 +203,13 @@ export function createBridgeClient(win: Window = window): BridgeClient {
       destroyed = true;
       for (const [, p] of pending) {
         clearTimeout(p.timer);
-        p.reject(new AppError({ code: 'ACQ_NO_PLAYER', message: 'bridge destroyed' }));
+        p.reject(
+          new AppError({ code: "ACQ_NO_PLAYER", message: "bridge destroyed" }),
+        );
       }
       pending.clear();
       ttCallbacks.clear();
-      win.removeEventListener('message', onMessage);
+      win.removeEventListener("message", onMessage);
     },
   };
 }

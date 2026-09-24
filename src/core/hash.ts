@@ -11,12 +11,12 @@ export function hashText(text: string): string {
     hash ^= text.charCodeAt(i);
     hash = (hash * 0x01000193) >>> 0; // FNV prime, stay in u32
   }
-  return hash.toString(16).padStart(8, '0');
+  return hash.toString(16).padStart(8, "0");
 }
 
 /**
  * Build the full text content of segments for hashing.
  */
 export function segmentsToText(segments: readonly { text: string }[]): string {
-  return segments.map((s) => s.text).join('\n');
+  return segments.map((s) => s.text).join("\n");
 }

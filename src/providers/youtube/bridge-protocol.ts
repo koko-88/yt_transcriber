@@ -2,27 +2,27 @@
 // (trusted) and the MAIN-world bridge (treated as UNTRUSTED). All payloads
 // flowing MAIN -> ISOLATED are validated structurally before use.
 
-import { z } from 'zod';
+import { z } from "zod";
 
-export const BRIDGE_NS = 'ytt-acq-v1';
+export const BRIDGE_NS = "ytt-acq-v1";
 
 export const BridgeOpSchema = z.enum([
-  'hello',
-  'getPlayerSnapshot',
-  'enableTrack',
-  'disableTrack',
-  'ensurePlaying',
-  'restorePlayback',
-  'startCapture',
-  'stopCapture',
-  'seek',
-  'getPlaybackTime',
+  "hello",
+  "getPlayerSnapshot",
+  "enableTrack",
+  "disableTrack",
+  "ensurePlaying",
+  "restorePlayback",
+  "startCapture",
+  "stopCapture",
+  "seek",
+  "getPlaybackTime",
 ]);
 export type BridgeOp = z.infer<typeof BridgeOpSchema>;
 
 export interface BridgeRequest {
   ns: typeof BRIDGE_NS;
-  dir: 'req';
+  dir: "req";
   nonce: string;
   reqId: string;
   op: BridgeOp;
@@ -31,7 +31,7 @@ export interface BridgeRequest {
 
 export interface BridgeResponse {
   ns: typeof BRIDGE_NS;
-  dir: 'res';
+  dir: "res";
   nonce: string;
   reqId: string;
   op: BridgeOp;
@@ -40,12 +40,12 @@ export interface BridgeResponse {
   error?: string;
 }
 
-export const BridgeEventKindSchema = z.enum(['timedtext-response', 'navigate']);
+export const BridgeEventKindSchema = z.enum(["timedtext-response", "navigate"]);
 export type BridgeEventKind = z.infer<typeof BridgeEventKindSchema>;
 
 export interface BridgeEvent {
   ns: typeof BRIDGE_NS;
-  dir: 'evt';
+  dir: "evt";
   nonce: string;
   kind: BridgeEventKind;
   payload: unknown;
@@ -92,17 +92,25 @@ export const EnableTrackPayloadSchema = z.object({
   vssId: z.string().max(100).optional(),
 });
 
-export function isBridgeMessage(v: unknown): v is BridgeRequest | BridgeResponse | BridgeEvent {
-  if (typeof v !== 'object' || v === null) return false;
+export function isBridgeMessage(
+  v: unknown,
+): v is BridgeRequest | BridgeResponse | BridgeEvent {
+  if (typeof v !== "object" || v === null) return false;
   const m = v as Record<string, unknown>;
-  return m['ns'] === BRIDGE_NS && (m['dir'] === 'req' || m['dir'] === 'res' || m['dir'] === 'evt');
+  return (
+    m["ns"] === BRIDGE_NS &&
+    (m["dir"] === "req" || m["dir"] === "res" || m["dir"] === "evt")
+  );
 }
 
 /** Detect which timedtext wire format a captured body uses. */
-export function detectWireFormat(url: string, body: string): 'json3' | 'srv3' | 'vtt' | null {
-  if (/[?&]fmt=vtt/.test(url) || body.startsWith('WEBVTT')) return 'vtt';
+export function detectWireFormat(
+  url: string,
+  body: string,
+): "json3" | "srv3" | "vtt" | null {
+  if (/[?&]fmt=vtt/.test(url) || body.startsWith("WEBVTT")) return "vtt";
   const head = body.slice(0, 64).trimStart();
-  if (head.startsWith('{') || head.startsWith('[')) return 'json3';
-  if (head.startsWith('<')) return 'srv3';
+  if (head.startsWith("{") || head.startsWith("[")) return "json3";
+  if (head.startsWith("<")) return "srv3";
   return null;
 }

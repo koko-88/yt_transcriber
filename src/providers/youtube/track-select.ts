@@ -1,8 +1,8 @@
 // Track enumeration and selection for YouTube acquisition.
 // Pure functions — unit-testable.
 
-import type { TranscriptTrack, TrackKind } from '../../core/model.js';
-import type { BridgeTrack } from './bridge-protocol.js';
+import type { TranscriptTrack, TrackKind } from "../../core/model.js";
+import type { BridgeTrack } from "./bridge-protocol.js";
 
 export interface TrackEntry {
   track: TranscriptTrack;
@@ -11,13 +11,15 @@ export interface TrackEntry {
 }
 
 function toKind(kind: string | undefined): TrackKind {
-  if (kind === 'asr') return 'asr';
-  if (kind === 'translated') return 'translated';
-  return 'manual';
+  if (kind === "asr") return "asr";
+  if (kind === "translated") return "translated";
+  return "manual";
 }
 
 /** Build deduplicated TranscriptTrack list with deterministic ids. */
-export function buildTrackEntries(bridgeTracks: readonly BridgeTrack[]): TrackEntry[] {
+export function buildTrackEntries(
+  bridgeTracks: readonly BridgeTrack[],
+): TrackEntry[] {
   const seen = new Set<string>();
   const entries: TrackEntry[] = [];
   for (const t of bridgeTracks) {
@@ -48,19 +50,24 @@ export function buildTrackEntries(bridgeTracks: readonly BridgeTrack[]): TrackEn
  * Select the preferred track: first preferred-language manual track, then
  * preferred-language ASR, then any manual, then first track.
  */
-export function selectTrack(entries: readonly TrackEntry[], preferredLangs: readonly string[]): TrackEntry | null {
+export function selectTrack(
+  entries: readonly TrackEntry[],
+  preferredLangs: readonly string[],
+): TrackEntry | null {
   if (entries.length === 0) return null;
   const norm = (l: string) => l.toLowerCase();
   const prefs = preferredLangs.map(norm);
 
   const matches = (e: TrackEntry): number => {
     const lang = norm(e.track.languageCode);
-    const idx = prefs.findIndex((p) => lang === p || lang.startsWith(`${p}-`) || p.startsWith(`${lang}-`));
+    const idx = prefs.findIndex(
+      (p) => lang === p || lang.startsWith(`${p}-`) || p.startsWith(`${lang}-`),
+    );
     return idx === -1 ? Infinity : idx;
   };
 
-  const manual = entries.filter((e) => e.track.kind === 'manual');
-  const asr = entries.filter((e) => e.track.kind === 'asr');
+  const manual = entries.filter((e) => e.track.kind === "manual");
+  const asr = entries.filter((e) => e.track.kind === "asr");
 
   const byPreference = (list: readonly TrackEntry[]): TrackEntry | null => {
     let best: TrackEntry | null = null;
