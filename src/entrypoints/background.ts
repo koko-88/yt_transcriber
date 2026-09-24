@@ -10,6 +10,14 @@ import { bus } from '../platform/messaging.js';
 import { openSidePanel } from '../platform/panel.js';
 import { logger } from '../core/logger.js';
 import { AppError } from '../core/errors.js';
+import { getSettings, saveSettings, type AppSettings } from '../storage/settings.js';
+import { saveTranscript, getTranscript } from '../storage/transcripts.js';
+import { recordRecent, listLibrary, deleteTranscriptCascade } from '../storage/recents.js';
+import { TranscriptSchema } from '../core/schemas.js';
+import type { Transcript } from '../core/model.js';
+import { AI_PROVIDERS } from '../ai/registry.js';
+import { runAi, testAi } from '../ai/runner.js';
+import { setSecret, deleteSecret, getSecret } from '../storage/secrets.js';
 
 /** Resolve the tab a panel request should act on: the sender's tab, else the active tab. */
 async function resolveTargetTabId(senderTabId: number | undefined): Promise<number> {
@@ -70,5 +78,88 @@ export default defineBackground(() => {
     return { ok: true };
   });
 
+  registerStorageHandlers();
+  registerAiHandlers();
   logger.info('background', 'background worker started');
 });
+
+export function registerStorageHandlers(): void {
+  bus.on('settings.get', z.object({}), ['extension-page'], async () => getSettings());
+
+  bus.on(
+    'settings.set',
+    z.object({ patch: z.record(z.string(), z.unknown()) }),
+    ['extension-page'],
+    async (p) => saveSettings(p.patch as Partial<AppSettings>),
+  );
+
+  bus.on('library.save', z.object({ transcript: TranscriptSchema }), ['extension-page'], async (p) => {
+    await saveTranscript(p.transcript as Transcript);
+    await recordRecent(p.transcript as Transcript);
+    return { ok: true };
+  });
+
+  bus.on('library.list', z.object({}), ['extension-page'], async () => listLibrary());
+
+  bus.on('library.delete', z.object({ transcriptId: z.string() }), ['extension-page'], async (p) => {
+    await deleteTranscriptCascade(p.transcriptId);
+    return { ok: true };
+  });
+
+  bus.on('transcript.get', z.object({ id: z.string() }), ['extension-page'], async (p) => {
+    return (await getTranscript(p.id)) ?? null;
+  });
+}
+export function registerAiHandlers(): void {
+  bus.on('ai.providers', z.object({}), ['extension-page'], async () =>
+    AI_PROVIDERS.map((p) => ({
+      id: p.id,
+      label: p.label,
+      defaultModel: p.defaultModel,
+      requiresKey: p.requiresKey,
+      isLocal: p.isLocal,
+    })),
+  );
+
+  bus.on(
+    'ai.run',
+    z.object({
+      request: z.object({
+        pipeline: z.enum(['summary', 'takeaways', 'chapters', 'qa']),
+        transcriptId: z.string(),
+        providerId: z.string(),
+        model: z.string(),
+        question: z.string().optional(),
+      }),
+      consent: z.boolean().optional(),
+    }),
+    ['extension-page'],
+    async (p) => runAi(p.request, p.consent ?? false),
+  );
+
+  bus.on(
+    'ai.test',
+    z.object({ providerId: z.string(), model: z.string() }),
+    ['extension-page'],
+    async (p) => testAi(p.providerId, p.model),
+  );
+
+  bus.on(
+    'ai.secret.set',
+    z.object({ providerId: z.string(), key: z.string(), sessionOnly: z.boolean().optional() }),
+    ['extension-page'],
+    async (p) => {
+      await setSecret(p.providerId, p.key, p.sessionOnly ?? false);
+      return { ok: true };
+    },
+  );
+
+  bus.on('ai.secret.delete', z.object({ providerId: z.string() }), ['extension-page'], async (p) => {
+    await deleteSecret(p.providerId);
+    return { ok: true };
+  });
+
+  bus.on('ai.secret.has', z.object({ providerId: z.string() }), ['extension-page'], async (p) => {
+    return { has: (await getSecret(p.providerId)) != null };
+  });
+}

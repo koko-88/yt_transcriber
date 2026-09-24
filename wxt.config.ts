@@ -10,6 +10,21 @@ export default defineConfig({
       description:
         'Private transcript workspace for YouTube. Your data stays local, your AI is your choice.',
       version: '1.0.0',
+      action: {
+        default_title: 'Transcript Workbench',
+        default_icon: {
+          16: 'icon/16.png',
+          32: 'icon/32.png',
+          48: 'icon/48.png',
+          128: 'icon/128.png',
+        },
+      },
+      icons: {
+        16: 'icon/16.png',
+        32: 'icon/32.png',
+        48: 'icon/48.png',
+        128: 'icon/128.png',
+      },
       permissions: ['storage', 'unlimitedStorage', 'sidePanel', 'scripting'],
       host_permissions: ['https://www.youtube.com/*'],
       optional_host_permissions: [

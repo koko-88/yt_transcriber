@@ -8,6 +8,11 @@ declare module "wxt/browser" {
     | "/background.js"
     | "/content-scripts/youtube-bridge.js"
     | "/content-scripts/youtube.js"
+    | "/icon/128.png"
+    | "/icon/16.png"
+    | "/icon/32.png"
+    | "/icon/48.png"
+    | "/sidepanel.html"
   type HtmlPublicPath = Extract<PublicPath, `${string}.html`>
   export interface WxtRuntime {
     getURL(path: PublicPath): string;

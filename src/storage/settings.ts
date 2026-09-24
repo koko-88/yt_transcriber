@@ -10,6 +10,7 @@ export interface AppSettings {
   inPlayerButton: boolean; // Show button in YouTube player DOM
   aiProvider: string; // The selected AI provider ID
   aiModel: string; // The selected model string
+  consents: Record<string, number>; // providerId -> consent timestamp
 }
 
 // Product Owner decision D19b fallback placeholder: Defaulting to true (Strict Local Mode ON) 
@@ -21,7 +22,8 @@ export const DEFAULT_SETTINGS: AppSettings = {
   strictMode: false, // Defaulting to false (Normal mode) as usually extensions want to show features, but can be flipped
   inPlayerButton: false, // Off by default to avoid DOM detection
   aiProvider: 'openai-compatible', // Default generic provider
-  aiModel: 'gpt-3.5-turbo',
+  aiModel: 'gpt-4o-mini',
+  consents: {},
 };
 
 const SETTINGS_KEY = 'yt_workbench_settings';
