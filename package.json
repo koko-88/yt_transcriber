@@ -52,6 +52,7 @@
     "ui:verify": "npm run tokens:build && npm run compile && npm run build-storybook"
   },
   "dependencies": {
+    "@huggingface/transformers": "^3.8.1",
     "@tanstack/react-virtual": "^3.13.0",
     "docx": "^9.7.2",
     "idb": "^8.0.2",

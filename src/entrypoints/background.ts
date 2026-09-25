@@ -43,6 +43,38 @@ import {
 import { setSecret, deleteSecret, getSecret } from "../storage/secrets.js";
 import { videoIdFromUrl } from "../providers/youtube/session.js";
 import { panelContextForTab } from "../platform/tab-context.js";
+import type { AudioSource } from "../providers/youtube/audio-source.js";
+
+let offscreenCreation: Promise<void> | null = null;
+async function hasSttDocument(): Promise<boolean> {
+  const runtime = browser.runtime as unknown as { getContexts?: (options: {
+    contextTypes: string[]; documentUrls: string[];
+  }) => Promise<unknown[]> };
+  if (!runtime.getContexts) return offscreenCreation !== null;
+  const contexts = await runtime.getContexts({
+    contextTypes: ["OFFSCREEN_DOCUMENT"],
+    documentUrls: [new URL("/stt-offscreen.html", browser.runtime.getURL("/sidepanel.html")).toString()],
+  });
+  return contexts.length > 0;
+}
+async function ensureSttDocument(): Promise<void> {
+  const offscreen = (browser as unknown as { offscreen?: {
+    createDocument(options: { url: string; reasons: string[]; justification: string }): Promise<void>;
+  } }).offscreen;
+  if (!offscreen) throw new Error("Local transcription requires Chromium offscreen documents");
+  if (!offscreenCreation) {
+    if (await hasSttDocument()) { offscreenCreation = Promise.resolve(); return; }
+    offscreenCreation = offscreen.createDocument({
+      url: "stt-offscreen.html",
+      reasons: ["WORKERS"],
+      justification: "Run cancellable local speech recognition independently of the side panel and service worker",
+    }).catch((error: unknown) => {
+      if (!/already exists|single offscreen/i.test(String(error))) throw error;
+    });
+  }
+  try { await offscreenCreation; }
+  catch (error) { offscreenCreation = null; throw error; }
+}
 
 /** The active browser tab is the only valid transcript target. */
 async function activeTab() {
@@ -159,6 +191,24 @@ export default defineBackground(() => {
   bus.on("playback.getTime", z.object({}), ["extension-page"], () =>
     forwardToContent("playback.getTime", {}),
   );
+
+  bus.on("stt.start", z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }), ["extension-page"], async ({ videoId }) => {
+    const source = await forwardToContent<AudioSource | null>("stt.source", { videoId }, videoId);
+    if (!source || source.videoId !== videoId) throw new Error("No usable full audio source is exposed for this video");
+    await ensureSttDocument();
+    return browser.runtime.sendMessage({ target: "stt-offscreen", type: "start", source });
+  });
+  bus.on("stt.status", z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }), ["extension-page"], async ({ videoId }) => {
+    if (await hasSttDocument())
+      return browser.runtime.sendMessage({ target: "stt-offscreen", type: "status" });
+    const transcript = await getTranscript(`youtube:${videoId}:local-whisper`);
+    return transcript ? { videoId, phase: "ready", progress: 1, transcript } :
+      { videoId: null, phase: "idle", progress: 0 };
+  });
+  bus.on("stt.cancel", z.object({}), ["extension-page"], async () => {
+    if (!(await hasSttDocument())) return { videoId: null, phase: "idle", progress: 0 };
+    return browser.runtime.sendMessage({ target: "stt-offscreen", type: "cancel" });
+  });
 
   // ---- relay: content script -> all panel pages ----
 

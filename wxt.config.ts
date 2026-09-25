@@ -25,8 +25,14 @@ export default defineConfig({
         48: "icon/48.png",
         128: "icon/128.png",
       },
-      permissions: ["storage", "unlimitedStorage", "sidePanel"],
-      host_permissions: ["https://www.youtube.com/*"],
+      permissions: ["storage", "unlimitedStorage", "sidePanel", "offscreen"],
+      host_permissions: [
+        "https://www.youtube.com/*",
+        "https://*.googlevideo.com/*",
+        "https://huggingface.co/*",
+        "https://*.hf.co/*",
+        "https://*.xethub.hf.co/*",
+      ],
       optional_host_permissions: [
         "https://api.openai.com/*",
         "https://openrouter.ai/*",
@@ -46,9 +52,9 @@ export default defineConfig({
       },
       content_security_policy: {
         extension_pages: [
-          "script-src 'self'",
+          "script-src 'self' 'wasm-unsafe-eval'",
           "object-src 'self'",
-          `connect-src 'self' https://api.openai.com https://openrouter.ai https://api.groq.com https://api.mistral.ai https://generativelanguage.googleapis.com http://localhost:* http://127.0.0.1:*`,
+          `connect-src 'self' https://*.googlevideo.com https://huggingface.co https://*.hf.co https://*.xethub.hf.co https://api.openai.com https://openrouter.ai https://api.groq.com https://api.mistral.ai https://generativelanguage.googleapis.com http://localhost:* http://127.0.0.1:*`,
         ].join("; "),
       },
     };
@@ -56,7 +62,7 @@ export default defineConfig({
     if (browser === "firefox") {
       return {
         ...base,
-        permissions: base.permissions.filter((p) => p !== "sidePanel"),
+        permissions: base.permissions.filter((p) => p !== "sidePanel" && p !== "offscreen"),
         // MV2 has no optional_host_permissions key; optional host patterns
         // must be listed under optional_permissions instead.
         optional_permissions: base.optional_host_permissions,

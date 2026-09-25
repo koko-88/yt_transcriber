@@ -17,20 +17,14 @@ export function findActiveItemIndex(
   if (items.length === 0) return -1;
   if (playbackMs < 0) return -1;
 
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i]!;
-    if (playbackMs >= item.startMs && playbackMs < item.endMs) return i;
+  // Cues are ordered by start time. Binary search keeps playback updates cheap
+  // even for hour-long transcripts with tens of thousands of cues.
+  let lo = 0;
+  let hi = items.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (items[mid]!.startMs <= playbackMs) lo = mid + 1;
+    else hi = mid;
   }
-
-  // After the last cue ends: stay on the last item.
-  const last = items[items.length - 1]!;
-  if (playbackMs >= last.endMs) return items.length - 1;
-
-  // In a gap: prefer the most recent item that has started.
-  let best = -1;
-  for (let i = 0; i < items.length; i++) {
-    if (items[i]!.startMs <= playbackMs) best = i;
-    else break;
-  }
-  return best;
+  return lo - 1;
 }

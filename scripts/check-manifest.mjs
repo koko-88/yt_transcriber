@@ -30,8 +30,15 @@ const ALLOWED_PERMISSIONS = new Set([
   "storage",
   "unlimitedStorage",
   "sidePanel",
+  "offscreen",
 ]);
-const ALLOWED_HOSTS = ["https://www.youtube.com/*"];
+const ALLOWED_HOSTS = [
+  "https://www.youtube.com/*",
+  "https://*.googlevideo.com/*",
+  "https://huggingface.co/*",
+  "https://*.hf.co/*",
+  "https://*.xethub.hf.co/*",
+];
 const PROVIDER_ORIGINS = [
   "https://api.openai.com/*",
   "https://openrouter.ai/*",
@@ -66,7 +73,7 @@ for (const [browserName, rel] of [
     JSON.stringify(m.permissions),
   );
   check(
-    `${browserName}: only youtube host permission`,
+    `${browserName}: only media and model host permissions`,
     (m.host_permissions ?? []).every((h) => ALLOWED_HOSTS.includes(h)),
   );
   check(

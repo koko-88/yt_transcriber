@@ -9,7 +9,7 @@ import { logger } from "../core/logger.js";
 import { AppError } from "../core/errors.js";
 import type { Transcript, TranscriptTrack } from "../core/model.js";
 import type { AcquisitionResult, Availability } from "../core/result.js";
-import { AcquisitionResultSchema } from "../core/schemas.js";
+import { AcquisitionResultSchema, TranscriptSchema } from "../core/schemas.js";
 import type { VideoPageState } from "../providers/youtube/session.js";
 import type { AppSettings } from "../storage/settings.js";
 import { DEFAULT_SETTINGS } from "../storage/settings.js";
@@ -58,6 +58,9 @@ interface PanelState {
   follow: boolean;
   playbackMs: number;
   playing: boolean;
+  sttPhase: "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
+  sttProgress: number;
+  sttError: string | null;
   searchQuery: string;
 
   // library
@@ -76,6 +79,8 @@ interface PanelState {
     opts?: { allowPlaybackMutation?: boolean },
   ): Promise<void>;
   seek(timeMs: number): Promise<void>;
+  startTranscription(): Promise<void>;
+  cancelTranscription(): Promise<void>;
   saveCurrentToLibrary(): Promise<void>;
   removeFromLibrary(transcriptId: string): Promise<void>;
   loadLibrary(): Promise<void>;
@@ -89,12 +94,12 @@ function resolveLocale(setting: AppSettings["locale"]): Locale {
   return navigator.language.toLowerCase().startsWith("ar") ? "ar" : "en";
 }
 
-let followTimer: ReturnType<typeof setInterval> | null = null;
+let playbackPort: ReturnType<typeof browser.tabs.connect> | null = null;
 let pageEpoch = 0;
 let acquireEpoch = 0;
 let refreshRetryCount = 0;
 
-const PLAYBACK_POLL_FOLLOW_MS = 250;
+const PLAYBACK_POLL_FOLLOW_MS = 100;
 const PLAYBACK_POLL_IDLE_MS = 1000;
 
 /** Follow-mode poll interval (ms). Exported for regression tests. */
@@ -102,52 +107,29 @@ export const FOLLOW_PLAYBACK_POLL_MS = PLAYBACK_POLL_FOLLOW_MS;
 /** Idle / paused poll interval (ms). */
 export const IDLE_PLAYBACK_POLL_MS = PLAYBACK_POLL_IDLE_MS;
 
-function startPlaybackPolling(
+async function startPlaybackStream(
   get: () => PanelState,
   set: (partial: Partial<PanelState>) => void,
 ) {
-  if (followTimer) {
-    clearInterval(followTimer);
-    followTimer = null;
-  }
-  const tick = async () => {
-    if (typeof document !== "undefined" && document.hidden) return;
-    if (!get().videoId) return;
-    try {
-      const pb = await bus.request<{ timeSeconds: number; playing: boolean }>(
-        "playback.getTime",
-      );
-      set({
-        playbackMs: Math.round(pb.timeSeconds * 1000),
-        playing: pb.playing,
-      });
-    } catch {
-      /* tab gone */
-    }
-  };
-  const schedule = () => {
-    if (followTimer) clearInterval(followTimer);
-    const interval =
-      get().follow || get().playing
-        ? PLAYBACK_POLL_FOLLOW_MS
-        : PLAYBACK_POLL_IDLE_MS;
-    followTimer = setInterval(() => {
-      void tick();
-      // Re-evaluate cadence when follow/playing changes.
-      const next =
-        get().follow || get().playing
-          ? PLAYBACK_POLL_FOLLOW_MS
-          : PLAYBACK_POLL_IDLE_MS;
-      if (next !== interval) schedule();
-    }, interval);
-  };
-  void tick();
-  schedule();
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) void tick();
+  playbackPort?.disconnect();
+  playbackPort = null;
+  if (document.hidden || !get().videoId) return;
+  try {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    if (!tab?.id || document.hidden || !get().videoId) return;
+    const port = browser.tabs.connect(tab.id, { name: "ytt-playback" });
+    playbackPort = port;
+    port.postMessage({ follow: get().follow });
+    port.onMessage.addListener((raw: unknown) => {
+      const sample = raw as { videoId?: string; timeSeconds?: number; playing?: boolean };
+      if (document.hidden || sample.videoId !== get().videoId ||
+          !Number.isFinite(sample.timeSeconds) || typeof sample.playing !== "boolean") return;
+      set({ playbackMs: Math.round(sample.timeSeconds! * 1000), playing: sample.playing });
     });
-  }
+    port.onDisconnect.addListener(() => {
+      if (playbackPort === port) playbackPort = null;
+    });
+  } catch { /* content script may still be initializing */ }
 }
 
 export const usePanelStore = create<PanelState>((set, get) => ({
@@ -168,6 +150,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   follow: false,
   playbackMs: 0,
   playing: false,
+  sttPhase: "idle",
+  sttProgress: 0,
+  sttError: null,
   searchQuery: "",
 
   recents: [],
@@ -200,6 +185,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         payload?: { videoId?: string | null };
       };
       if (msg?.type === "panel.videoChanged") {
+        if (get().sttPhase === "preparing" || get().sttPhase === "transcribing")
+          void bus.request("stt.cancel").catch(() => undefined);
         pageEpoch++;
         acquireEpoch++;
         refreshRetryCount = 0;
@@ -213,21 +200,41 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           metadata: null,
           availability: "unsupported-page-structure",
           loading: false,
+          sttPhase: "idle",
+          sttProgress: 0,
+          sttError: null,
         });
         void get().refreshPageState();
       }
+      if (msg?.type === "stt.update") {
+        const update = msg.payload as unknown as {
+          videoId?: string; phase?: PanelState["sttPhase"]; progress?: number;
+          error?: string; transcript?: unknown;
+        };
+        if (update.videoId !== get().videoId) return;
+        const parsed = update.transcript ? TranscriptSchema.safeParse(update.transcript) : null;
+        set({
+          sttPhase: update.phase ?? "idle",
+          sttProgress: Number.isFinite(update.progress) ? update.progress! : 0,
+          sttError: update.error ?? null,
+          ...(parsed?.success ? { transcript: parsed.data, availability: "available" as const } : {}),
+        });
+      }
     });
 
-    // Playback polling while the panel is open (drives follow + active segment).
-    startPlaybackPolling(get, set);
+    void startPlaybackStream(get, set);
+    document.addEventListener("visibilitychange", () => {
+      if (document.hidden) {
+        playbackPort?.disconnect();
+        playbackPort = null;
+      } else void startPlaybackStream(get, set);
+    });
 
     // Stop polling when the panel is hidden or closed; the panel page can be
     // kept alive by the browser for a long time and must not poll forever.
     window.addEventListener("pagehide", () => {
-      if (followTimer) {
-        clearInterval(followTimer);
-        followTimer = null;
-      }
+      playbackPort?.disconnect();
+      playbackPort = null;
     });
 
     // Always surface the shell UI even if background messaging failed — otherwise
@@ -244,7 +251,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
   setFollow(follow) {
     set({ follow });
-    // Cadence adjusts on next poll tick via schedule().
+    playbackPort?.postMessage({ follow });
   },
   setSearchQuery(searchQuery) {
     set({ searchQuery });
@@ -289,6 +296,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           loading: false,
         });
       }
+      if (!playbackPort) void startPlaybackStream(get, set);
       const state = await bus.request<VideoPageState>("acq.getState", {
         videoId: context.videoId,
       });
@@ -324,6 +332,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       ) {
         // Auto-acquire never mutates playback (ads / paused / unmuted stay intact).
         void get().acquire(undefined, { allowPlaybackMutation: false });
+      } else if (state.availability === "no-captions" && !get().transcript &&
+                 get().sttPhase === "idle") {
+        void get().startTranscription();
       }
     } catch (e) {
       logger.warn("panel", "video context or content routing failed", {
@@ -379,6 +390,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         }
       } else {
         set({ availability: result.reason, transcript: null });
+        if (result.reason === "no-captions" || result.reason === "fetch-empty" ||
+            result.reason === "parse-failed") void get().startTranscription();
       }
     } catch (e) {
       if (epoch !== acquireEpoch || get().videoId !== expectedVideoId) return;
@@ -395,10 +408,35 @@ export const usePanelStore = create<PanelState>((set, get) => ({
 
   async seek(timeMs) {
     try {
-      await bus.request("acq.seek", { timeMs });
+      const result = await bus.request<{ ok: boolean }>("acq.seek", { timeMs });
+      if (result.ok) set({ playbackMs: timeMs });
     } catch (e) {
       logger.warn("panel", "seek failed", { error: String(e) });
     }
+  },
+
+  async startTranscription() {
+    const videoId = get().videoId;
+    if (!videoId) return;
+    set({ availability: "no-captions", sttPhase: "preparing", sttProgress: 0, sttError: null });
+    try {
+      const existing = await bus.request<{ videoId: string | null; phase: PanelState["sttPhase"]; progress: number; transcript?: unknown }>("stt.status", { videoId });
+      if (get().videoId !== videoId) return;
+      const result = existing.videoId === videoId && existing.phase !== "cancelled" && existing.phase !== "error"
+        ? existing
+        : await bus.request<typeof existing>("stt.start", { videoId });
+      if (get().videoId !== videoId) return;
+      const parsed = result.transcript ? TranscriptSchema.safeParse(result.transcript) : null;
+      set({ sttPhase: result.phase, sttProgress: result.progress,
+        ...(parsed?.success ? { transcript: parsed.data, availability: "available" as const } : {}) });
+    } catch (error) {
+      if (get().videoId === videoId)
+        set({ sttPhase: "error", sttError: error instanceof Error ? error.message : String(error) });
+    }
+  },
+  async cancelTranscription() {
+    await bus.request("stt.cancel").catch(() => undefined);
+    set({ sttPhase: "cancelled" });
   },
 
   async saveCurrentToLibrary() {

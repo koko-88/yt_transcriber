@@ -134,9 +134,9 @@ export function snapshotFromPlayerResponse(
       typeof player.getOption === "function",
     adPlaying: (() => {
       try {
-        const el = document.querySelector(".html5-video-player");
+        const el = player instanceof Element ? player : document.querySelector(".html5-video-player");
         if (el?.classList.contains("ad-showing")) return true;
-        return !!document.querySelector(
+        return !!el?.querySelector?.(
           ".ytp-ad-player-overlay, .ytp-ad-module .ytp-ad-player-overlay-layout",
         );
       } catch {

@@ -58,10 +58,11 @@ export type AcquisitionMethod =
   | "yt-static-url"
   | "yt-player-url"
   | "yt-player-observed"
-  | "yt-transcript-panel";
+  | "yt-transcript-panel"
+  | "local-whisper";
 
 /** The format of the raw caption data */
-export type CaptionFormat = "json3" | "srv3" | "vtt";
+export type CaptionFormat = "json3" | "srv3" | "vtt" | "stt";
 
 /** Source information for the acquisition */
 export interface TranscriptSource {

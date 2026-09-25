@@ -150,6 +150,7 @@ export function ActionsMenu({
   const [status, setStatus] = useState<string | null>(null);
   const [includeTimestamps, setIncludeTimestamps] = useState(true);
   const [includeMetadata, setIncludeMetadata] = useState(true);
+  const [exportView, setExportView] = useState<ViewMode>(viewMode);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
 
@@ -176,7 +177,7 @@ export function ActionsMenu({
   }, [open]);
 
   const textOpts: ExportTextOptions = {
-    view: viewMode === "paragraph" ? "paragraph" : "segment",
+    view: exportView === "paragraph" ? "paragraph" : "segment",
     timestamps: includeTimestamps,
     metadata: includeMetadata,
   };
@@ -210,6 +211,18 @@ export function ActionsMenu({
         type="button"
         className="btn action-trigger"
         aria-haspopup="menu"
+        aria-expanded={open && panel !== "root"}
+        onClick={() => {
+          setOpen(true);
+          setPanel("export");
+        }}
+      >
+        {tr("transcript.export")}
+      </button>
+      <button
+        type="button"
+        className="btn action-trigger"
+        aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
         onClick={() => {
@@ -228,6 +241,14 @@ export function ActionsMenu({
         >
           {panel === "root" && (
             <>
+              <button
+                type="button"
+                className="btn action-export-entry"
+                role="menuitem"
+                onClick={() => setPanel("export")}
+              >
+                {tr("transcript.export")} →
+              </button>
               <div className="action-section-label">
                 {tr("transcript.copy")}
               </div>
@@ -268,14 +289,6 @@ export function ActionsMenu({
                   {tr("notes.add")}
                 </button>
               )}
-              <button
-                type="button"
-                className="btn"
-                role="menuitem"
-                onClick={() => setPanel("export")}
-              >
-                {tr("transcript.export")}…
-              </button>
             </>
           )}
 
@@ -288,6 +301,11 @@ export function ActionsMenu({
               >
                 ← {tr("transcript.actions")}
               </button>
+              <div className="action-section-label">{tr("transcript.export")}</div>
+              <div className="action-view-choice" role="group" aria-label={tr("transcript.export.viewHint", { view: "" })}>
+                <button type="button" className="btn" aria-pressed={exportView === "paragraph"} onClick={() => setExportView("paragraph")}>{tr("transcript.view.paragraph")}</button>
+                <button type="button" className="btn" aria-pressed={exportView === "raw"} onClick={() => setExportView("raw")}>{tr("transcript.view.raw")}</button>
+              </div>
               <label className="action-check">
                 <input
                   type="checkbox"
@@ -304,14 +322,6 @@ export function ActionsMenu({
                 />{" "}
                 {tr("transcript.export.metadata")}
               </label>
-              <div className="action-hint">
-                {tr("transcript.export.viewHint", {
-                  view:
-                    viewMode === "paragraph"
-                      ? tr("transcript.view.paragraph")
-                      : tr("transcript.view.raw"),
-                })}
-              </div>
               {TEXT_EXPORTS.map((ex) => (
                 <button
                   key={ex.id}

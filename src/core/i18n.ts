@@ -42,6 +42,13 @@ export const messages = {
     "transcript.view.raw": "Segments",
     "transcript.actions": "Actions",
     "transcript.follow": "Follow playback",
+    "transcript.stt.preparing": "Preparing full audio for local transcription…",
+    "transcript.stt.transcribing": "Transcribing locally…",
+    "transcript.stt.error": "Audio transcription could not complete.",
+    "transcript.stt.cancel": "Cancel transcription",
+    "transcript.stt.retry": "Retry transcription",
+    "transcript.stt.generated": "Generated transcription",
+    "transcript.stt.youtube": "YouTube transcript",
     "transcript.copy": "Copy",
     "transcript.copy.text": "Copy text",
     "transcript.copy.timestamps": "Copy with timestamps",
@@ -85,7 +92,7 @@ export const messages = {
     "availability.available-partial":
       "Only part of this caption track was returned. Retry to get the complete transcript.",
     "availability.no-captions":
-      "No captions available. This release uses YouTube captions when the creator provides them. Audio transcription is not included.",
+      "No usable captions. Local audio transcription is available.",
     "availability.login-required": "Sign in to YouTube to view this transcript",
     "availability.age-restricted": "This video is age-restricted",
     "availability.members-only": "This video is for channel members only",
@@ -252,6 +259,13 @@ export const messages = {
     "transcript.view.raw": "مقاطع",
     "transcript.actions": "إجراءات",
     "transcript.follow": "تتبع التشغيل",
+    "transcript.stt.preparing": "جارٍ تجهيز الصوت الكامل للنسخ المحلي…",
+    "transcript.stt.transcribing": "جارٍ النسخ محليًا…",
+    "transcript.stt.error": "تعذر إكمال النسخ الصوتي.",
+    "transcript.stt.cancel": "إلغاء النسخ",
+    "transcript.stt.retry": "إعادة محاولة النسخ",
+    "transcript.stt.generated": "نسخ صوتي مُنشأ",
+    "transcript.stt.youtube": "نص يوتيوب",
     "transcript.copy": "نسخ",
     "transcript.copy.text": "نسخ النص",
     "transcript.copy.timestamps": "نسخ مع الأوقات",
@@ -295,7 +309,7 @@ export const messages = {
     "availability.available-partial":
       "تم إرجاع جزء فقط من مسار الترجمة. أعد المحاولة للحصول على النص الكامل.",
     "availability.no-captions":
-      "لا تتوفر تعليقات توضيحية. هذا الإصدار يعتمد على ترجمات YouTube عندما يوفّرها المنشئ. نسخ الصوت غير مشمول.",
+      "لا تتوفر ترجمة قابلة للاستخدام. يتوفر النسخ الصوتي المحلي.",
     "availability.login-required":
       "سجّل الدخول إلى YouTube لعرض هذه النسخة النصية",
     "availability.age-restricted": "هذا الفيديو مقيد بالعمر",

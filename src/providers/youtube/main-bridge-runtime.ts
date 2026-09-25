@@ -12,6 +12,7 @@ import { installCapture, uninstallCapture } from "./main-bridge-capture.js";
 
 interface YtPlayerRt {
   getPlayerResponse?: () => unknown;
+  getVideoData?: () => { video_id?: string };
   getPlayerState?: () => number;
   getOption?: (m: string, o: string) => unknown;
   setOption?: (m: string, o: string, v: unknown) => void;
@@ -73,6 +74,34 @@ function respond(
 }
 
 function getPlayer(): YtPlayerRt | null {
+  if (location.pathname.startsWith("/shorts/")) {
+    const target = location.pathname.match(/^\/shorts\/([\w-]{11})/)?.[1];
+    const reels = [...document.querySelectorAll("ytd-reel-video-renderer")];
+    // Shorts keeps adjacent reels mounted. Prefer the reel whose player reports
+    // the URL's video ID; only then fall back to the active visible reel.
+    const players = reels.map((reel) => ({
+      reel,
+      player: reel.querySelector("#movie_player, #shorts-player, .html5-video-player") as unknown as YtPlayerRt | null,
+    })).filter((item) => item.player);
+    const matching = players.find(({ player }) => {
+      try { return playerVideoId(player!) === target; } catch { return false; }
+    });
+    if (matching) return matching.player;
+    const active = players.find(({ reel }) =>
+      (reel.hasAttribute("is-active") || reel.hasAttribute("active")) &&
+      reel.getBoundingClientRect().height > 0,
+    );
+    if (active) return active.player;
+    const visible = players.filter(({ reel }) => reel.getBoundingClientRect().height > 0)
+      .sort((a, b) => {
+        const center = window.innerHeight / 2;
+        const ar = a.reel.getBoundingClientRect();
+        const br = b.reel.getBoundingClientRect();
+        return Math.abs(ar.top + ar.height / 2 - center) -
+          Math.abs(br.top + br.height / 2 - center);
+      })[0];
+    if (visible) return visible.player;
+  }
   const el =
     document.getElementById("movie_player") ??
     document.querySelector("ytd-reel-video-renderer #movie_player") ??
@@ -84,9 +113,9 @@ function getPlayer(): YtPlayerRt | null {
 /** True while a YouTube ad overlay is active — never mutate playback then. */
 export function isAdShowing(): boolean {
   try {
-    const player = document.querySelector(".html5-video-player");
+    const player = getPlayer() as unknown as Element | null;
     if (player?.classList.contains("ad-showing")) return true;
-    return !!document.querySelector(
+    return !!player?.querySelector?.(
       ".ytp-ad-player-overlay, .ytp-ad-module .ytp-ad-player-overlay-layout, .ytp-ad-text",
     );
   } catch {
@@ -155,7 +184,7 @@ function captureOriginalState(player: YtPlayerRt): void {
 function playerVideoId(player: YtPlayerRt): string | null {
   const response = player.getPlayerResponse?.() as
     { videoDetails?: { videoId?: string } } | undefined;
-  return response?.videoDetails?.videoId ?? null;
+  return response?.videoDetails?.videoId ?? player.getVideoData?.()?.video_id ?? null;
 }
 
 async function handleEnableTrack(
@@ -405,7 +434,6 @@ async function handle(req: BridgeRequest): Promise<void> {
       const sp = (req.payload ?? {}) as { seconds?: unknown };
       if (
         !player ||
-        typeof player.seekTo !== "function" ||
         typeof sp.seconds !== "number" ||
         !Number.isFinite(sp.seconds) ||
         sp.seconds < 0
@@ -414,7 +442,12 @@ async function handle(req: BridgeRequest): Promise<void> {
         return;
       }
       try {
-        player.seekTo(sp.seconds, true);
+        if (player.seekTo) player.seekTo(sp.seconds, true);
+        else {
+          const media = (player as unknown as Element).querySelector?.("video") as HTMLVideoElement | null;
+          if (!media) throw new Error("no-seekable-media");
+          media.currentTime = sp.seconds;
+        }
         respond(req, true);
       } catch (e) {
         respond(req, false, undefined, String(e));
@@ -426,9 +459,10 @@ async function handle(req: BridgeRequest): Promise<void> {
         respond(req, false, undefined, "no-player");
         return;
       }
+      const media = (player as unknown as Element).querySelector?.("video") as HTMLVideoElement | null;
       respond(req, true, {
-        timeSeconds: player.getCurrentTime ? player.getCurrentTime() : 0,
-        playing: player.getPlayerState ? player.getPlayerState() === 1 : false,
+        timeSeconds: player.getCurrentTime?.() ?? media?.currentTime ?? 0,
+        playing: player.getPlayerState ? player.getPlayerState() === 1 : !!media && !media.paused,
       });
       return;
     }
