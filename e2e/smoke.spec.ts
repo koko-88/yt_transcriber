@@ -166,7 +166,9 @@ test("transcript empty / not-a-video state is announced", async () => {
   // not hang on Loading.
   await expect(page.getByRole("tablist")).toBeVisible();
   await expect(page.getByRole("status")).toBeVisible({ timeout: 10_000 });
-  await expect(page.getByText("Open a YouTube video", { exact: false })).toBeVisible();
+  await expect(
+    page.getByText("Open a YouTube video", { exact: false }),
+  ).toBeVisible();
   await page.close();
 });
 
@@ -235,5 +237,72 @@ test("product entry opens a native panel and binds the active YouTube video", as
   expect(windows).toHaveLength(1);
   expect(windows[0]?.type).toBe("normal");
   await launcher.close();
+  await video.close();
+});
+
+test("deterministic YouTube fixture acquires and replaces the transcript after SPA navigation", async () => {
+  const videoA = "abcdefghijk";
+  const videoB = "ABCDEFGHIJK";
+  const video = await context!.newPage();
+  const captionBody = (label: string) =>
+    JSON.stringify({
+      events: [
+        { tStartMs: 0, dDurationMs: 1000, segs: [{ utf8: `Start ${label}` }] },
+        { tStartMs: 9000, dDurationMs: 1000, segs: [{ utf8: `End ${label}` }] },
+      ],
+    });
+  await video.route("https://www.youtube.com/**", (route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === "/api/timedtext") {
+      const label = url.searchParams.get("v") === videoB ? "B" : "A";
+      return route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: captionBody(label),
+      });
+    }
+    if (url.pathname === "/watch") {
+      return route.fulfill({
+        status: 200,
+        contentType: "text/html",
+        body: `<!doctype html><title>Fixture</title><div id="movie_player"></div><script>
+          window.fixtureVideoId = "${videoA}";
+          const player = document.getElementById("movie_player");
+          player.getPlayerResponse = () => ({
+            videoDetails: { videoId: window.fixtureVideoId, title: "Fixture " + window.fixtureVideoId, author: "Fixture", lengthSeconds: "10" },
+            playabilityStatus: { status: "OK" },
+            captions: { playerCaptionsTracklistRenderer: { captionTracks: [
+              { languageCode: "en", vssId: ".en", baseUrl: "https://www.youtube.com/api/timedtext?v=" + window.fixtureVideoId + "&lang=en" }
+            ] } }
+          });
+          player.getPlayerState = () => 2;
+          player.getOption = () => ({});
+          player.setOption = () => {};
+          player.getCurrentTime = () => 0;
+          player.getDuration = () => 10;
+        </script>`,
+      });
+    }
+    return route.abort();
+  });
+  await video.goto(`https://www.youtube.com/watch?v=${videoA}`);
+  const panel = await openPanel();
+  await video.bringToFront();
+  await expect(panel.locator(".transcript-head")).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(panel.getByText("Start A", { exact: false })).toBeVisible();
+
+  await video.evaluate((nextId) => {
+    (window as typeof window & { fixtureVideoId: string }).fixtureVideoId =
+      nextId;
+    history.pushState(null, "", `/watch?v=${nextId}`);
+    document.dispatchEvent(new Event("yt-navigate-finish"));
+  }, videoB);
+  await expect(panel.getByText("Start B", { exact: false })).toBeVisible({
+    timeout: 20_000,
+  });
+  await expect(panel.getByText("Start A", { exact: false })).toHaveCount(0);
+  await panel.close();
   await video.close();
 });

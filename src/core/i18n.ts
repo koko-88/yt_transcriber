@@ -80,6 +80,8 @@ export const messages = {
     "availability.unsupported-page-structure":
       "YouTube page structure has changed. Check for extension updates.",
     "availability.network-error": "Network error while loading captions",
+    "availability.player-state-restore-failed":
+      "Could not restore the video player after caption retrieval. Check playback and CC, then retry.",
     "availability.unknown": "An unexpected error occurred",
 
     // Library
@@ -266,6 +268,8 @@ export const messages = {
     "availability.unsupported-page-structure":
       "تغير هيكل صفحة YouTube. تحقق من تحديثات الإضافة.",
     "availability.network-error": "خطأ في الشبكة أثناء تحميل التعليقات",
+    "availability.player-state-restore-failed":
+      "تعذر استعادة حالة مشغل الفيديو بعد جلب الترجمة. تحقق من التشغيل والترجمة ثم أعد المحاولة.",
     "availability.unknown": "حدث خطأ غير متوقع",
 
     // Library

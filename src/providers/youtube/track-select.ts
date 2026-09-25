@@ -13,7 +13,6 @@ export interface TrackEntry {
 
 function toKind(kind: string | undefined): TrackKind {
   if (kind === "asr") return "asr";
-  if (kind === "translated") return "translated";
   return "manual";
 }
 
@@ -24,6 +23,7 @@ export function buildTrackEntries(
   const seen = new Set<string>();
   const entries: TrackEntry[] = [];
   for (const t of bridgeTracks) {
+    if (t.kind === "translated") continue;
     const kind = toKind(t.kind);
     let identity = t.vssId;
     if (!identity && t.baseUrl) {

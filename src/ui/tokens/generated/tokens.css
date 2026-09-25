@@ -38,7 +38,8 @@
   --core-radius-md: 8px;
   --core-radius-lg: 12px;
   --core-radius-pill: 999px;
-  --core-font-family: Roboto, 'Segoe UI', 'Noto Sans', 'Noto Sans Arabic', Arial, sans-serif;
+  --core-font-family:
+    Roboto, "Segoe UI", "Noto Sans", "Noto Sans Arabic", Arial, sans-serif;
   --core-font-size-caption: 12px;
   --core-font-size-body: 14px;
   --core-font-size-title: 16px;
@@ -72,7 +73,8 @@
   --semantic-color-dark-danger-surface: #42211f;
   --semantic-color-highlight: #ffe168;
   --semantic-color-on-highlight: #0f0f0f;
-  --semantic-type-family: Roboto, 'Segoe UI', 'Noto Sans', 'Noto Sans Arabic', Arial, sans-serif;
+  --semantic-type-family:
+    Roboto, "Segoe UI", "Noto Sans", "Noto Sans Arabic", Arial, sans-serif;
   --semantic-type-body: 14px;
   --semantic-type-caption: 12px;
   --semantic-type-title: 16px;

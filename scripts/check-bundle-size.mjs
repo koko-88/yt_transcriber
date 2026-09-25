@@ -1,7 +1,5 @@
 // Node.js verification script.
 
-/* eslint-env node */
-
 // Bundle budget check: fails if any shipped JS chunk exceeds its budget.
 // Budgets are generous V1 ceilings to catch accidental dependency bloat.
 import { readdirSync, statSync } from "node:fs";

@@ -24,6 +24,14 @@ describe("buildTrackEntries", () => {
     expect(new Set(entries.map((e) => e.track.trackId)).size).toBe(3);
   });
 
+  it("does not advertise unverified translated tracks", () => {
+    const entries = buildTrackEntries([
+      track({ languageCode: "ar", kind: "translated" }),
+      track({ languageCode: "en" }),
+    ]);
+    expect(entries.map((entry) => entry.track.languageCode)).toEqual(["en"]);
+  });
+
   it("preserves baseUrl for static fetch", () => {
     const entries = buildTrackEntries([
       track({ baseUrl: "https://example.com/timedtext" }),

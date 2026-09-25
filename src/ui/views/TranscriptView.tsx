@@ -48,6 +48,7 @@ const AVAILABILITY_KEYS: Record<Availability, MessageKey> = {
   "parse-failed": "availability.parse-failed",
   "unsupported-page-structure": "availability.unsupported-page-structure",
   "network-error": "availability.network-error",
+  "player-state-restore-failed": "availability.player-state-restore-failed",
   unknown: "availability.unknown",
 };
 
@@ -203,6 +204,7 @@ export function TranscriptView() {
             s.availability === "fetch-empty" ||
             s.availability === "needs-player-interaction" ||
             s.availability === "network-error" ||
+            s.availability === "player-state-restore-failed" ||
             s.availability === "parse-failed" ||
             s.availability === "unknown" ||
             s.availability === "unsupported-page-structure") && (

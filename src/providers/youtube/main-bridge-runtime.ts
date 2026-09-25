@@ -246,7 +246,33 @@ async function handleRestore(
           /* ignore */
         }
       }
-      if (prev?.wasPaused) player.pauseVideo?.();
+      if (prev.wasPaused) player.pauseVideo?.();
+      else if (player.getPlayerState?.() !== 1) player.playVideo?.();
+
+      const restored = await waitFor(() => {
+        const state = player.getPlayerState?.();
+        if (state != null && (state === 1) === prev.wasPaused) return false;
+        const muted = player.isMuted?.();
+        if (muted != null && muted !== prev.wasMuted) return false;
+        const ccButton = document.querySelector?.(".ytp-subtitles-button");
+        if (
+          ccButton &&
+          (ccButton.getAttribute("aria-pressed") === "true") !==
+            prev.hadCaptions
+        )
+          return false;
+        if (
+          prev.didSeek &&
+          player.getCurrentTime &&
+          Math.abs(player.getCurrentTime() - prev.timeSeconds) > 1.5
+        )
+          return false;
+        return true;
+      }, 1200);
+      if (!restored) {
+        respond(req, false, undefined, "player-state-not-restored");
+        return;
+      }
     }
     respond(req, true);
   } catch (e) {

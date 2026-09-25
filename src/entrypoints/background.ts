@@ -55,9 +55,16 @@ async function activeTab() {
  * Never search other windows for a convenient YouTube tab: that can show a
  * transcript belonging to a different video than the one the user is viewing.
  */
-async function resolveTargetTabId(): Promise<number> {
+async function resolveTargetTabId(expectedVideoId?: string): Promise<number> {
   const active = await activeTab();
-  if (active?.id != null && videoIdFromUrl(active.url ?? "")) return active.id;
+  const activeVideoId = videoIdFromUrl(active?.url ?? "");
+  if (expectedVideoId && activeVideoId !== expectedVideoId) {
+    throw new AppError({
+      code: "ACQ_STALE_VIDEO",
+      message: "active video changed",
+    });
+  }
+  if (active?.id != null && activeVideoId) return active.id;
 
   throw new AppError({
     code: "ACQ_NO_PLAYER",
@@ -65,9 +72,23 @@ async function resolveTargetTabId(): Promise<number> {
   });
 }
 
-async function forwardToContent<T>(type: string, payload: unknown): Promise<T> {
-  const tabId = await resolveTargetTabId();
-  return bus.request<T>(type, payload, tabId);
+async function forwardToContent<T>(
+  type: string,
+  payload: unknown,
+  expectedVideoId?: string,
+): Promise<T> {
+  const tabId = await resolveTargetTabId(expectedVideoId);
+  const result = await bus.request<T>(type, payload, tabId);
+  if (
+    expectedVideoId &&
+    (await resolveTargetTabId(expectedVideoId)) !== tabId
+  ) {
+    throw new AppError({
+      code: "ACQ_STALE_VIDEO",
+      message: "active tab changed",
+    });
+  }
+  return result;
 }
 
 export default defineBackground(() => {
@@ -111,15 +132,21 @@ export default defineBackground(() => {
     return panelContextForTab(await activeTab());
   });
 
-  bus.on("acq.getState", z.object({}), ["extension-page"], () =>
-    forwardToContent("acq.getState", {}),
+  bus.on(
+    "acq.getState",
+    z.object({ videoId: z.string().optional() }),
+    ["extension-page"],
+    (p) => forwardToContent("acq.getState", p, p.videoId),
   );
 
   bus.on(
     "acq.acquire",
-    z.object({ trackId: z.string().optional() }),
+    z.object({
+      trackId: z.string().optional(),
+      videoId: z.string().optional(),
+    }),
     ["extension-page"],
-    (p) => forwardToContent("acq.acquire", p),
+    (p) => forwardToContent("acq.acquire", p, p.videoId),
   );
 
   bus.on(

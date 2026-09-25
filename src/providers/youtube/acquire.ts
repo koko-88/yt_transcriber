@@ -33,7 +33,6 @@ import { logger } from "../../core/logger.js";
 const CAPTURE_TIMEOUT_MS = 10_000;
 /** Mid-window nudge so the player re-issues the track after an empty 200. */
 const EMPTY_RESPONSE_NUDGE_MS = 1_500;
-const MAX_TRACK_ATTEMPTS = 2;
 
 export interface CaptionFetchResult {
   status: number;
@@ -49,11 +48,24 @@ export interface AcquireDeps {
   ) => Promise<CaptionFetchResult>;
   /** The video this run is for; aborts as stale if the page navigated. */
   videoId: string;
+  currentVideoId?: () => string | null;
   signal: AbortSignal;
   preferredLangs: readonly string[];
   /** Specific track id requested by the user, if any. */
   requestedTrackId?: string | undefined;
   now?: () => number;
+}
+
+function assertCurrent(deps: AcquireDeps): void {
+  if (
+    deps.signal.aborted ||
+    (deps.currentVideoId && deps.currentVideoId() !== deps.videoId)
+  ) {
+    throw new AppError({
+      code: "ACQ_STALE_VIDEO",
+      message: "video changed during acquisition",
+    });
+  }
 }
 
 class Tracer {
@@ -103,6 +115,7 @@ class HttpError extends Error {
 }
 
 class PartialCaptionError extends Error {}
+class RestoreError extends Error {}
 
 function captionName(url: string | undefined): string | null {
   if (!url) return null;
@@ -218,12 +231,23 @@ async function tryStaticFetch(
   const res = await tracer.run("c1-static-url", "fetch", () =>
     deps.fetchCaption(u.toString(), deps.signal),
   );
+  assertCurrent(deps);
   if (res.status !== 200)
     throw new HttpError(res.status, `timedtext http ${res.status}`);
-  if (!res.body || res.body.length === 0) return null;
+  if (!res.body || res.body.trim().length === 0) {
+    tracer.traces.push({
+      stage: "c1-static-url",
+      method: "validateBody",
+      durationMs: 0,
+      success: false,
+      error: "HTTP 200 with empty caption body",
+    });
+    return null;
+  }
   const segments = parseCaption(res.body, "json3");
   if (!segments) throw new Error("caption parse failed");
   const snapshot = await deps.bridge.getPlayerSnapshot();
+  assertCurrent(deps);
   if (snapshot.videoId !== deps.videoId) {
     throw new AppError({
       code: "ACQ_STALE_VIDEO",
@@ -291,14 +315,7 @@ async function captureNonEmpty(
     const matches = (c: TimedTextCapture): boolean => {
       if (c.status !== 200) return false;
       const track = entry.track;
-      if (track.kind === "translated" && track.translatedFrom) {
-        return timedTextMatchesTrack(c.url, {
-          languageCode: track.translatedFrom,
-          translatedTo: track.languageCode,
-          videoId: deps.videoId,
-          ...(entry.vssId ? { vssId: entry.vssId } : {}),
-        });
-      }
+
       return timedTextMatchesTrack(c.url, {
         languageCode: track.languageCode,
         ...(track.kind === "asr" ? { kind: "asr" } : {}),
@@ -332,7 +349,7 @@ async function tryPlayerObserved(
   const captureAbort = new AbortController();
   let nudgeTimer: ReturnType<typeof setTimeout> | null = null;
   let nudgePromise: Promise<void> | null = null;
-  try {
+  const run = async (): Promise<Transcript | null> => {
     await tracer.run("c3b-capture", "startCapture", () =>
       deps.bridge.startCapture(),
     );
@@ -407,6 +424,7 @@ async function tryPlayerObserved(
     const segments = parseCaption(capture.body, format);
     if (!segments) throw new Error("caption parse failed");
     const snapshot = await deps.bridge.getPlayerSnapshot();
+    assertCurrent(deps);
     if (snapshot.videoId !== deps.videoId) {
       throw new AppError({
         code: "ACQ_STALE_VIDEO",
@@ -426,16 +444,79 @@ async function tryPlayerObserved(
       capture.url,
       tracer,
     );
+  };
+  let result: Transcript | null = null;
+  let acquisitionFailed = false;
+  let acquisitionError: unknown;
+  let restoreError: unknown;
+  try {
+    result = await run();
+  } catch (error) {
+    acquisitionFailed = true;
+    acquisitionError = error;
   } finally {
     if (nudgeTimer) clearTimeout(nudgeTimer);
     captureAbort.abort();
-    // clearTimeout does not cancel a callback already running. A late nudge
-    // must finish before restoration or it can re-enable CC/playback after it.
+    // A running reload must finish before restoration.
     if (nudgePromise) await nudgePromise;
-    await deps.bridge.restorePlayback().catch(() => undefined);
-    await deps.bridge.stopCapture().catch(() => undefined);
+    try {
+      await tracer.run("restore", "restorePlayback", () =>
+        deps.bridge.restorePlayback(),
+      );
+    } catch (error) {
+      restoreError = error;
+    } finally {
+      await deps.bridge.stopCapture().catch(() => undefined);
+    }
   }
+  if (restoreError) {
+    throw new RestoreError(
+      `player state restoration failed: ${String(restoreError)}`,
+    );
+  }
+  if (acquisitionFailed) throw acquisitionError;
+  return result;
 }
+
+interface TranscriptStrategy {
+  readonly id: "static-url" | "player-observed";
+  readonly canHandle: (
+    entry: TrackEntry,
+    entries: readonly TrackEntry[],
+  ) => boolean;
+  readonly acquire: (
+    deps: AcquireDeps,
+    tracer: Tracer,
+    entry: TrackEntry,
+  ) => Promise<Transcript | null>;
+}
+
+const strategies: readonly TranscriptStrategy[] = [
+  {
+    id: "static-url",
+    canHandle: (entry) => !!entry.baseUrl,
+    acquire: tryStaticFetch,
+  },
+  {
+    id: "player-observed",
+    canHandle: (entry, entries) => {
+      const peers = entries.filter(
+        (other) =>
+          other.track.languageCode === entry.track.languageCode &&
+          other.track.kind === entry.track.kind,
+      );
+      const name = captionName(entry.baseUrl);
+      return (
+        peers.length <= 1 ||
+        (!!name &&
+          !peers.some(
+            (other) => other !== entry && captionName(other.baseUrl) === name,
+          ))
+      );
+    },
+    acquire: tryPlayerObserved,
+  },
+];
 
 /**
  * Run the full acquisition ladder for the current video page.
@@ -447,6 +528,7 @@ export async function acquireTranscript(
 ): Promise<AcquisitionResult> {
   const now = deps.now ?? Date.now;
   const tracer = new Tracer(now);
+  assertCurrent(deps);
 
   let snapshot: PlayerSnapshot;
   try {
@@ -468,6 +550,7 @@ export async function acquireTranscript(
     });
   }
 
+  assertCurrent(deps);
   const availability = mapSnapshotToAvailability(snapshot);
   if (availability !== "available") return fail(availability, tracer);
 
@@ -480,94 +563,57 @@ export async function acquireTranscript(
   const first = requested ?? selectTrack(entries, deps.preferredLangs);
   if (!first) return fail("no-captions", tracer);
 
-  const attempts: TrackEntry[] = [first];
-  if (!requested) {
-    const second = selectTrack(
-      entries.filter((e) => e !== first),
-      deps.preferredLangs,
-    );
-    if (second) attempts.push(second);
-  }
-
   let sawEmptyBody = false;
   let sawTimeout = false;
   let sawPartial = false;
   let sawParseFailure = false;
   let sawNetworkFailure = false;
   let sawAmbiguousTrack = false;
+  let sawRestoreFailure = false;
 
-  for (const entry of attempts.slice(0, MAX_TRACK_ATTEMPTS)) {
-    if (deps.signal.aborted)
-      throw new AppError({ code: "ACQ_STALE_VIDEO", message: "aborted" });
-
-    // ---- C1: static URL (cheap, no playback side effects) ----
-    try {
-      const t = await tryStaticFetch(deps, tracer, entry);
-      if (t)
-        return { ok: true, transcript: t, tracks: entries.map((e) => e.track) };
-    } catch (e) {
-      if (e instanceof AppError && e.code === "ACQ_STALE_VIDEO") throw e;
-      if (e instanceof PartialCaptionError) sawPartial = true;
-      if (e instanceof Error && e.message === "caption parse failed")
-        sawParseFailure = true;
-      if (e instanceof TypeError || (e instanceof HttpError && e.status >= 500))
-        sawNetworkFailure = true;
-      if (e instanceof HttpError && (e.status === 403 || e.status === 404)) {
-        logger.info("acquire", "static url rejected, continuing ladder", {
-          status: e.status,
-        });
-      } else {
-        logger.info("acquire", "static fetch failed, continuing ladder", {
-          error: String(e),
-        });
-      }
-    }
-
-    // A same-language duplicate without a unique URL name cannot be safely
-    // correlated to a player response. Its own static URL remains usable.
-    const peers = entries.filter(
-      (e) =>
-        e.track.languageCode === entry.track.languageCode &&
-        e.track.kind === entry.track.kind,
-    );
-    const name = captionName(entry.baseUrl);
-    if (
-      peers.length > 1 &&
-      (!name ||
-        peers.some((e) => e !== entry && captionName(e.baseUrl) === name))
-    ) {
-      sawAmbiguousTrack = true;
+  // A run is bound to one track. Fall back across mechanisms, never languages.
+  for (const strategy of strategies) {
+    assertCurrent(deps);
+    if (!strategy.canHandle(first, entries)) {
+      if (strategy.id === "player-observed") sawAmbiguousTrack = true;
       continue;
     }
-
-    // ---- C3b: player-observed capture ----
     try {
-      const t = await tryPlayerObserved(deps, tracer, entry);
-      if (t)
-        return { ok: true, transcript: t, tracks: entries.map((e) => e.track) };
+      const transcript = await strategy.acquire(deps, tracer, first);
+      assertCurrent(deps);
+      if (transcript) {
+        return {
+          ok: true,
+          transcript,
+          tracks: entries.map((entry) => entry.track),
+        };
+      }
       sawEmptyBody = true;
-    } catch (e) {
-      if (e instanceof AppError && e.code === "ACQ_STALE_VIDEO") throw e;
-      if (e instanceof PartialCaptionError) sawPartial = true;
+    } catch (error) {
+      assertCurrent(deps);
+      if (error instanceof RestoreError) sawRestoreFailure = true;
+      if (error instanceof PartialCaptionError) sawPartial = true;
       if (
-        e instanceof Error &&
-        (e.message === "caption parse failed" ||
-          e.message === "caption format unknown")
+        error instanceof Error &&
+        (error.message === "caption parse failed" ||
+          error.message === "caption format unknown")
       )
         sawParseFailure = true;
-      if (e instanceof AppError && e.code === "ACQ_TIMEOUT") {
+      if (
+        error instanceof TypeError ||
+        (error instanceof HttpError && error.status >= 500)
+      )
+        sawNetworkFailure = true;
+      if (error instanceof AppError && error.code === "ACQ_TIMEOUT")
         sawTimeout = true;
-        logger.info("acquire", "capture timed out for track", {
-          track: entry.track.trackId,
-        });
-      } else {
-        logger.warn("acquire", "player-observed capture failed", {
-          error: String(e),
-        });
-      }
+      logger.warn("acquire", `${strategy.id} failed`, {
+        error: String(error),
+        track: first.track.trackId,
+      });
     }
   }
 
+  if (sawRestoreFailure) return fail("player-state-restore-failed", tracer);
   if (sawPartial) return fail("available-partial", tracer);
   if (sawParseFailure) return fail("parse-failed", tracer);
   if (sawNetworkFailure) return fail("network-error", tracer);

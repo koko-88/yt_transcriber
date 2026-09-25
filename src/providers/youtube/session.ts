@@ -6,6 +6,7 @@ import { z } from "zod";
 import { browser } from "wxt/browser";
 import { bus } from "../../platform/messaging.js";
 import { logger } from "../../core/logger.js";
+import { AppError } from "../../core/errors.js";
 import type { AcquisitionResult, Availability } from "../../core/result.js";
 import type { TranscriptTrack, VideoMetadata } from "../../core/model.js";
 import { createBridgeClient, type BridgeClient } from "./bridge-client.js";
@@ -106,6 +107,7 @@ export function startYouTubeSession(): void {
     controller: AbortController;
     promise: Promise<AcquisitionResult>;
   } | null = null;
+  let lastCancelled: Promise<void> = Promise.resolve();
 
   async function ensureBridge(): Promise<boolean> {
     if (bridgeReady) return true;
@@ -134,17 +136,32 @@ export function startYouTubeSession(): void {
   function cancelInFlight(reason: string): void {
     if (inFlight) {
       logger.info("session", `cancelling in-flight acquisition: ${reason}`);
-      inFlight.controller.abort();
+      const cancelled = inFlight;
+      cancelled.controller.abort();
+      lastCancelled = cancelled.promise.then(
+        () => undefined,
+        () => undefined,
+      );
       inFlight = null;
     }
   }
 
+  function clearInFlight(controller: AbortController): void {
+    if (inFlight?.controller === controller) inFlight = null;
+  }
+
   bus.on(
     "acq.getState",
-    z.object({}),
+    z.object({ videoId: z.string().optional() }),
     ["extension-page"],
-    async (): Promise<VideoPageState> => {
+    async (payload): Promise<VideoPageState> => {
       const videoId = videoIdFromUrl(location.href);
+      if (payload.videoId && payload.videoId !== videoId) {
+        throw new AppError({
+          code: "ACQ_STALE_VIDEO",
+          message: "active video changed",
+        });
+      }
       if (!videoId)
         return {
           videoId: null,
@@ -178,10 +195,19 @@ export function startYouTubeSession(): void {
 
   bus.on(
     "acq.acquire",
-    z.object({ trackId: z.string().optional() }),
+    z.object({
+      trackId: z.string().optional(),
+      videoId: z.string().optional(),
+    }),
     ["extension-page"],
     async (payload): Promise<AcquisitionResult> => {
       const videoId = videoIdFromUrl(location.href);
+      if (payload.videoId && payload.videoId !== videoId) {
+        throw new AppError({
+          code: "ACQ_STALE_VIDEO",
+          message: "active video changed",
+        });
+      }
       if (!videoId) {
         return {
           ok: false,
@@ -191,8 +217,19 @@ export function startYouTubeSession(): void {
         };
       }
       const key = `${videoId}:${payload.trackId ?? "auto"}`;
-      if (inFlight && inFlight.key === key) return inFlight.promise;
-      cancelInFlight("superseded");
+      for (;;) {
+        if (inFlight?.key === key) return inFlight.promise;
+        if (inFlight) cancelInFlight("superseded");
+        await lastCancelled;
+        if (inFlight) continue;
+        if (videoIdFromUrl(location.href) !== videoId) {
+          throw new AppError({
+            code: "ACQ_STALE_VIDEO",
+            message: "active video changed",
+          });
+        }
+        break;
+      }
 
       const controller = new AbortController();
       const promise = (async (): Promise<AcquisitionResult> => {
@@ -201,12 +238,13 @@ export function startYouTubeSession(): void {
             bridge,
             fetchCaption,
             videoId,
+            currentVideoId: () => videoIdFromUrl(location.href),
             signal: controller.signal,
             preferredLangs: [...navigator.languages],
             ...(payload.trackId ? { requestedTrackId: payload.trackId } : {}),
           });
         } finally {
-          if (inFlight?.controller === controller) inFlight = null;
+          clearInFlight(controller);
         }
       })();
       inFlight = { key, controller, promise };

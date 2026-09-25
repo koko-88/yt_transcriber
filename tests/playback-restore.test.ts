@@ -16,6 +16,7 @@ async function runtime(initial: {
   time: number;
   track: unknown;
   captionsPressed?: boolean;
+  ignorePause?: boolean;
 }) {
   let playing = initial.playing;
   let muted = initial.muted;
@@ -38,7 +39,7 @@ async function runtime(initial: {
       playing = true;
     },
     pauseVideo: () => {
-      playing = false;
+      if (!initial.ignorePause) playing = false;
     },
     mute: () => {
       muted = true;
@@ -79,7 +80,11 @@ async function runtime(initial: {
     await import("../src/providers/youtube/main-bridge-runtime");
   startMainBridge();
   let reqId = 0;
-  async function send(op: BridgeRequest["op"], payload?: unknown) {
+  async function send(
+    op: BridgeRequest["op"],
+    payload?: unknown,
+    expectedOk = true,
+  ) {
     const request: BridgeRequest = {
       ns: BRIDGE_NS,
       dir: "req",
@@ -89,14 +94,19 @@ async function runtime(initial: {
       payload,
     };
     listener?.({ source: win, data: request });
-    await vi.waitFor(() =>
-      expect(responses.find((r) => r.reqId === request.reqId)).toBeDefined(),
+    await vi.waitFor(
+      () =>
+        expect(responses.find((r) => r.reqId === request.reqId)).toBeDefined(),
+      { timeout: 3_000 },
     );
-    expect(responses.find((r) => r.reqId === request.reqId)?.ok).toBe(true);
+    expect(responses.find((r) => r.reqId === request.reqId)?.ok).toBe(
+      expectedOk,
+    );
   }
   return {
     send,
     state: () => ({ playing, muted, time, track, captionsPressed }),
+    lastResponse: () => responses.at(-1),
     changeVideo: (id: string) => {
       videoId = id;
     },
@@ -150,6 +160,21 @@ describe("temporary player interaction", () => {
       track: original,
       captionsPressed: true,
     });
+  });
+
+  it("reports failure when a paused player refuses to pause after acquisition", async () => {
+    const app = await runtime({
+      playing: false,
+      muted: false,
+      time: 0,
+      track: null,
+      ignorePause: true,
+    });
+    await app.send("hello");
+    await app.send("enableTrack", { languageCode: "en" });
+    await app.send("ensurePlaying");
+    await app.send("restorePlayback", undefined, false);
+    expect(app.lastResponse()?.error).toBe("player-state-not-restored");
   });
 
   it("does not restore old-video state onto a new video", async () => {

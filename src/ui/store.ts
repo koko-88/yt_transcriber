@@ -6,6 +6,7 @@ import { create } from "zustand";
 import { browser } from "wxt/browser";
 import { bus } from "../platform/messaging.js";
 import { logger } from "../core/logger.js";
+import { AppError } from "../core/errors.js";
 import type { Transcript, TranscriptTrack } from "../core/model.js";
 import type { AcquisitionResult, Availability } from "../core/result.js";
 import { AcquisitionResultSchema } from "../core/schemas.js";
@@ -248,7 +249,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           loading: false,
         });
       }
-      const state = await bus.request<VideoPageState>("acq.getState");
+      const state = await bus.request<VideoPageState>("acq.getState", {
+        videoId: context.videoId,
+      });
       if (epoch !== pageEpoch) return;
       if (state.videoId !== context.videoId) {
         retryTransientFailure();
@@ -304,7 +307,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     try {
       const raw = await bus.request<unknown>(
         "acq.acquire",
-        trackId ? { trackId } : {},
+        trackId
+          ? { trackId, videoId: expectedVideoId }
+          : { videoId: expectedVideoId },
       );
       const parsed = AcquisitionResultSchema.safeParse(raw);
       if (!parsed.success) throw new Error("malformed acquisition result");
@@ -322,6 +327,10 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       }
     } catch (e) {
       if (epoch !== acquireEpoch || get().videoId !== expectedVideoId) return;
+      if (e instanceof AppError && e.code === "ACQ_STALE_VIDEO") {
+        void get().refreshPageState();
+        return;
+      }
       logger.error("panel", "acquire failed", { error: String(e) });
       set({ availability: "unknown", transcript: null });
     } finally {

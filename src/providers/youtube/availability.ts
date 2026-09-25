@@ -40,6 +40,7 @@ export const RETRYABLE: ReadonlySet<Availability> = new Set([
   "fetch-empty",
   "needs-player-interaction",
   "network-error",
+  "player-state-restore-failed",
   "unsupported-page-structure",
   "unknown",
 ]);

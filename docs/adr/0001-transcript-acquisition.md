@@ -1,66 +1,70 @@
-# ADR 0001: YouTube transcript acquisition ladder
+# ADR 0001: YouTube caption acquisition
 
-- Status: Accepted (M0-A, 2026-09-24)
-- Deciders: engineering
-- Evidence: the M0-A headful acquisition spike ran against live YouTube with
-  Playwright (`spike/acquisition-spike.mjs`, reports `report-v1.json`,
-  `report.json`, `report-v3.json`). The spike and its raw reports were removed
-  from the tree once this decision was recorded; the findings below are the
-  durable record.
+- Status: Updated 2026-09-25
+- Scope: The active YouTube watch video in the current browser window
 
-## Context
+## Runtime observations
 
-The plan (D01/D02) requires an in-page acquisition ladder with graceful
-degradation. Candidate mechanisms:
+The player response exposes caption tracks and their `baseUrl` values. In the
+automated YouTube environment, direct requests to those URLs returned HTTP 200
+with an empty body. A player-issued timedtext response sometimes carried the
+full JSON3 track. The page also exposed a `getTranscriptEndpoint` command in
+its engagement panel data, but the browser probe did not observe a successful
+native transcript response. Its request shape and reliability remain unverified,
+so it is not an acquisition strategy.
 
-- **C1** — static `captionTracks[].baseUrl` from the player response + `fmt=json3`
-- **C2** — `movie_player.getOption('captions','tracklist')`
-- **C3b** — enable a caption track via the player API and capture the player's
-  **own** `/api/timedtext` request **and response body** (which carries the
-  runtime `pot` token), restoring caption/playback state afterwards
+These observations describe the test environment, not a guarantee about every
+YouTube session. Final manual browser acceptance remains necessary.
 
-## Evidence summary
+## Provider contract and order
 
-| Video                       | C1 static fetch                            | C2 tracklist             | C3b capture                                                                         |
-| --------------------------- | ------------------------------------------ | ------------------------ | ----------------------------------------------------------------------------------- |
-| dQw4w9WgXcQ (manual+asr ×6) | HTTP 200, **0 bytes**                      | 5 tracks, **no baseUrl** | cues rendered once playback actually started                                        |
-| jNQXAC9IVRw (manual en+de)  | HTTP 200, **0 bytes**                      | 2 tracks, no baseUrl     | XHR captured, `pot` in URL, **HTTP 200, 683 bytes, valid json3** (`wireMagic: pb3`) |
-| 9bZkp7q19f0 (ASR ko)        | HTTP 200, **0 bytes**                      | unavailable              | request observed with `pot`; empty body in flagged context                          |
-| eKFTSSKCzWA (no captions)   | n/a (0 tracks)                             | n/a                      | n/a → `no-captions`                                                                 |
-| Shorts URL (`/shorts/<id>`) | redirects to `/watch`; normal path applies | —                        | —                                                                                   |
+`acquireTranscript` binds a run to one video ID and one selected caption track.
+Two strategies implement the same `canHandle` and `acquire` contract:
 
-Environment finding: in automation-flagged contexts (headless + automation
-flags), YouTube returns **HTTP 200 with empty bodies even for the player's own
-requests** (`cuesVisible=false`). With `--disable-blink-features=AutomationControlled`
-the identical code path returns full json3 bodies and cues render. The empty-200
-soft-block is therefore environment detection, not a mechanism failure. Production
-must surface this as the retryable `fetch-empty` state.
+1. **Static URL.** Fetch the selected track's player-response `baseUrl` with
+   JSON3 format in the content script. This does not change player state.
+2. **Player-observed timedtext.** If the static response is empty or fails,
+   observe the player's own fetch/XHR timedtext response while temporarily
+   selecting the same track. This is bounded by a capture timeout. It is skipped
+   when a same-language duplicate cannot be identified unambiguously.
 
-## Decision
+A successful response must parse into nonempty, valid cues and pass the
+whole-track completeness check. HTTP 200 with an empty body, a fragment,
+or a response for another video or track never counts as success. Failure on
+the selected track does not silently switch to another language. The user may
+choose another track explicitly. Translated tracks are not offered because their
+acquisition has not been verified.
 
-1. **Primary mechanism: C3b** — enable the target track through the official
-   player API and capture the player's own timedtext **response body**
-   (fetch + XHR hooks installed _before_ enabling the track). Never construct
-   or refetch timedtext URLs ourselves: `pot` tokens are effectively
-   single-use/context-bound, and refetches return empty 200s.
-2. **C1 retained as a cheap first attempt** (one fetch, no playback side
-   effects) for regions/experiments where static URLs still serve content;
-   any empty body falls through to C3b.
-3. **C2 used for enumeration cross-check only** (it exposes no `baseUrl`).
-4. Player state is always restored (previous caption track, pause state)
-   after acquisition; `restorePlayback` runs in `finally`.
-5. Playback requirement: captions only load while playing. The bridge mutes,
-   seeks off the boundary if needed, and calls `playVideo()`. If the player
-   refuses to play, acquisition ends as `needs-player-interaction` (retryable).
-6. If no timedtext response arrives within the capture window after a track
-   was already loaded, the ladder retries once with a seek nudge, then tries
-   the next-best track (max 2 track attempts per acquisition run).
+## Session and player safety
 
-## Consequences
+The panel sends its expected video ID with state and acquisition requests.
+The background checks the exact active tab before and after forwarding. The
+content script checks its URL before starting and after async acquisition steps.
+YouTube SPA navigation aborts in-flight acquisition; the session waits for cleanup before starting another run. The panel rejects stale
+results by epoch and video ID.
 
-- The MAIN-world bridge is minimal and untrusted; all payloads validated by
-  zod in the ISOLATED world (`bridge-protocol.ts`).
-- No media downloads are triggered intentionally; the player may buffer small
-  amounts of media during the capture window (same as a user pressing play).
-- `fetch-empty` and `needs-player-interaction` are first-class retryable
-  availability states in the UI.
+The second strategy captures pause/play, mute, position, visible CC, and current
+caption selection before changing the player. Restoration runs in `finally`
+on success, timeout, parse failure, and cancellation. The MAIN-world bridge
+checks the observable playback, mute, CC, and position state before acknowledging
+restoration. If that check fails, acquisition returns
+`player-state-restore-failed` instead of a transcript. A new video's player
+is never mutated to restore an old video's state.
+
+Expected failures include no captions, unavailable or initializing player,
+empty caption responses, partial data, parse or network errors, stale
+navigation, and restoration failure. Stage diagnostics record acquisition and
+restoration timing and errors.
+
+## Validation
+
+Provider contract tests cover track identity, cancellation, completeness,
+fallback order, and restoration failure. A local Playwright fixture serves a
+YouTube-shaped player response and JSON3 captions, then simulates SPA navigation
+from video A to B through the built content script, provider, and panel. It
+does not replace real YouTube acceptance.
+
+The extension uses a WXT isolated content script plus a MAIN-world bridge, in
+line with [WXT's content-script guidance](https://wxt.dev/guide/essentials/content-scripts).
+The active-tab routing uses the browser tabs messaging surface described in
+[Chrome's tabs API](https://developer.chrome.com/docs/extensions/reference/api/tabs).

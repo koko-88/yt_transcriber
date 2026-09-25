@@ -1,7 +1,5 @@
 // Node.js verification script.
 
-/* eslint-env node */
-
 // Compute SHA-256 checksums for the packaged extension archives.
 // Writes .output/SHA256SUMS.txt in `sha256  filename` format.
 import { createHash } from "node:crypto";

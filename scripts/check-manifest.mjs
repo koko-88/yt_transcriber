@@ -1,7 +1,5 @@
 // Node.js verification script.
 
-/* eslint-env node */
-
 // Post-build manifest assertions. Fails the build if the generated manifests
 // violate the permission/CSP policy documented in SECURITY.md.
 import { readFileSync } from "node:fs";

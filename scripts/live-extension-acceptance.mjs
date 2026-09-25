@@ -36,10 +36,23 @@ try {
         () => !!document.querySelector("#movie_player")?.getPlayerResponse?.(),
         { timeout: 15_000 },
       );
+      await video.waitForFunction(
+        () =>
+          [1, 2].includes(
+            document.querySelector("#movie_player")?.getPlayerState?.(),
+          ),
+        { timeout: 15_000 },
+      );
+      await video.evaluate(() =>
+        document.querySelector("#movie_player").pauseVideo(),
+      );
+      await video.waitForTimeout(1000);
+      const ccButton = video.locator(".ytp-subtitles-button");
+      if ((await ccButton.getAttribute("aria-pressed")) === "true")
+        await ccButton.click();
       const before = await video.evaluate(() => {
         const player = document.querySelector("#movie_player");
         player.pauseVideo();
-        player.setOption("captions", "track", {});
         return {
           paused: player.getPlayerState() !== 1,
           muted: player.isMuted(),
@@ -173,5 +186,14 @@ try {
   }
 } finally {
   await context?.close();
-  rmSync(profile, { recursive: true, force: true });
+  try {
+    rmSync(profile, {
+      recursive: true,
+      force: true,
+      maxRetries: 3,
+      retryDelay: 250,
+    });
+  } catch (error) {
+    console.error("Profile cleanup failed:", String(error));
+  }
 }

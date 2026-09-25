@@ -1,7 +1,5 @@
 // Node.js verification script.
 
-/* eslint-env node */
-
 // License check: verifies that every runtime dependency uses an OSI-approved
 // license compatible with distribution, and that THIRD_PARTY_NOTICES.md covers
 // all runtime dependencies.
