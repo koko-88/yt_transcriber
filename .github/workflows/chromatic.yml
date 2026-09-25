@@ -13,22 +13,38 @@ jobs:
   visual:
     name: Storybook visual regression
     runs-on: ubuntu-latest
-    if: ${{ secrets.CHROMATIC_PROJECT_TOKEN != '' }}
+    env:
+      CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
     steps:
+      - name: Skip when Chromatic is not configured
+        if: env.CHROMATIC_PROJECT_TOKEN == ''
+        run: echo "CHROMATIC_PROJECT_TOKEN is not configured; skipping visual regression."
+
       - uses: actions/checkout@v4
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
+
       - uses: actions/setup-node@v4
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         with:
           node-version: 24
           cache: npm
+
       - name: Install dependencies
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         run: npm ci --ignore-scripts
+
       - name: Generate trusted WXT types
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         run: npm run prepare
+
       - name: Generate design tokens
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         run: npm run tokens:build
+
       - name: Build Storybook
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         run: npm run build-storybook
+
       - name: Run Chromatic
+        if: env.CHROMATIC_PROJECT_TOKEN != ''
         run: npm run chromatic
-        env:
-          CHROMATIC_PROJECT_TOKEN: ${{ secrets.CHROMATIC_PROJECT_TOKEN }}
