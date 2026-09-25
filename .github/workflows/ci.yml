@@ -33,6 +33,11 @@ jobs:
       - name: Generate trusted WXT types
         run: npm run prepare
 
+      # Vitest includes Storybook browser tests through @vitest/browser-playwright,
+      # so Chromium must exist before `npm run test` starts.
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
       - name: Typecheck
         run: npm run compile
 
@@ -62,9 +67,6 @@ jobs:
 
       - name: Dependency audit (runtime dependencies)
         run: npm audit --omit=dev --audit-level=moderate
-
-      - name: Install Playwright browser
-        run: npx playwright install --with-deps chromium
 
       - name: Extension smoke test (E2E)
         run: npm run test:e2e
