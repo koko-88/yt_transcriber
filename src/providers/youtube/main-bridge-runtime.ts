@@ -73,9 +73,25 @@ function respond(
 }
 
 function getPlayer(): YtPlayerRt | null {
-  return document.getElementById(
-    "movie_player",
-  ) as unknown as YtPlayerRt | null;
+  const el =
+    document.getElementById("movie_player") ??
+    document.querySelector("ytd-reel-video-renderer #movie_player") ??
+    document.querySelector("#shorts-player") ??
+    document.querySelector(".html5-video-player");
+  return (el as unknown as YtPlayerRt) ?? null;
+}
+
+/** True while a YouTube ad overlay is active — never mutate playback then. */
+export function isAdShowing(): boolean {
+  try {
+    const player = document.querySelector(".html5-video-player");
+    if (player?.classList.contains("ad-showing")) return true;
+    return !!document.querySelector(
+      ".ytp-ad-player-overlay, .ytp-ad-module .ytp-ad-player-overlay-layout, .ytp-ad-text",
+    );
+  } catch {
+    return false;
+  }
 }
 
 function currentCaptionTrack(player: YtPlayerRt): {
@@ -285,6 +301,18 @@ async function handleEnsurePlaying(
   player: YtPlayerRt,
 ): Promise<void> {
   try {
+    // Never touch the player while an advertisement is on screen.
+    if (isAdShowing()) {
+      respond(req, false, undefined, "ad-playing");
+      return;
+    }
+    const state = player.getPlayerState?.();
+    // Already playing: do not mute/seek/play — just acknowledge so capture
+    // can keep observing without perceptible user-state changes.
+    if (state === 1) {
+      respond(req, true);
+      return;
+    }
     captureOriginalState(player);
     const prev = savedState;
     if (prev && !prev.wasMuted) {
@@ -292,6 +320,7 @@ async function handleEnsurePlaying(
       prev.didMute = true;
     } else {
       player.mute?.();
+      if (prev) prev.didMute = true;
     }
     const t = player.getCurrentTime?.() ?? 0;
     const d = player.getDuration?.() ?? Infinity;
@@ -342,6 +371,10 @@ async function handle(req: BridgeRequest): Promise<void> {
     case "enableTrack":
       if (!player) {
         respond(req, false, undefined, "no-player");
+        return;
+      }
+      if (isAdShowing()) {
+        respond(req, false, undefined, "ad-playing");
         return;
       }
       await handleEnableTrack(req, player);

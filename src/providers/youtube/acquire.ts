@@ -53,6 +53,12 @@ export interface AcquireDeps {
   preferredLangs: readonly string[];
   /** Specific track id requested by the user, if any. */
   requestedTrackId?: string | undefined;
+  /**
+   * When true, C3b may mute/seek/play to coax a caption response.
+   * Auto-acquire on page load keeps this false so ads and paused videos
+   * are never mutated unexpectedly; explicit Retry may set it true.
+   */
+  allowPlaybackMutation?: boolean | undefined;
   now?: () => number;
 }
 
@@ -383,7 +389,7 @@ async function tryPlayerObserved(
       ),
       new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
     ]);
-    if (!arrivedWithoutPlayback) {
+    if (!arrivedWithoutPlayback && deps.allowPlaybackMutation) {
       await tracer
         .run("c3b-capture", "ensurePlaying", () => deps.bridge.ensurePlaying())
         .catch(() => undefined);
@@ -401,6 +407,18 @@ async function tryPlayerObserved(
             await deps.bridge.ensurePlaying(true);
           }
         })().catch(() => undefined);
+      }, EMPTY_RESPONSE_NUDGE_MS);
+    } else if (!arrivedWithoutPlayback) {
+      // Non-invasive path: re-enable the track once without mute/seek/play.
+      nudgeTimer = setTimeout(() => {
+        nudgePromise = deps.bridge
+          .enableTrack({
+            languageCode: entry.track.languageCode,
+            ...(entry.track.kind === "asr" ? { kind: "asr" } : {}),
+            ...(entry.vssId ? { vssId: entry.vssId } : {}),
+            forceReload: true,
+          })
+          .catch(() => undefined);
       }, EMPTY_RESPONSE_NUDGE_MS);
     }
 
@@ -543,11 +561,11 @@ export async function acquireTranscript(
   }
 
   if (!snapshot.videoId) return fail("not-a-video-page", tracer);
+  if (snapshot.adPlaying) return fail("player-initializing", tracer);
   if (snapshot.videoId !== deps.videoId) {
-    throw new AppError({
-      code: "ACQ_STALE_VIDEO",
-      message: `snapshot video ${snapshot.videoId} != ${deps.videoId}`,
-    });
+    // Advertisement or pre-roll still attached to a different media id —
+    // wait without mutating playback.
+    return fail("player-initializing", tracer);
   }
 
   assertCurrent(deps);

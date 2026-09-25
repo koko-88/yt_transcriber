@@ -11,7 +11,11 @@ const BUDGETS = [
   ["background.js", 150],
   ["content-scripts/youtube-bridge.js", 120],
   ["content-scripts/youtube.js", 150],
-  ["sidepanel", 400],
+  ["sidepanel", 450],
+  // Lazy document exporters (loaded only on Actions → Export)
+  ["docx", 800],
+  ["pdf-lib", 600],
+  ["pptxgenjs", 900],
 ];
 
 const targets = process.argv[2]

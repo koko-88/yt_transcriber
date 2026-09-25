@@ -98,6 +98,7 @@ export const AvailabilitySchema = z.enum([
   "unsupported-page-structure",
   "network-error",
   "player-state-restore-failed",
+  "player-initializing",
   "unknown",
 ]);
 

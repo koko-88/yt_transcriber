@@ -1,5 +1,6 @@
-// Export — transcript export in TXT, Markdown, SRT, VTT, JSON formats
-// Per plan: copy variants, TXT/MD/SRT/VTT/JSON export
+// Export — copy variants and text/subtitle/json/csv serializers.
+// Binary document formats (DOCX/PDF/PPTX) live in export-docs.ts and are
+// loaded lazily so they stay out of the sidepanel startup chunk.
 
 import type { Transcript, TranscriptSegment } from "./model";
 import { toParagraphs } from "./paragraphs";
@@ -49,41 +50,107 @@ export function makeYouTubeTimestampUrl(videoId: string, ms: number): string {
   return `https://www.youtube.com/watch?v=${videoId}&t=${seconds}s`;
 }
 
-/** Export as plain text */
-export function exportTxt(transcript: Transcript): string {
-  const header = `${transcript.video.title}\n${transcript.video.canonicalUrl}\n${transcript.track.languageLabel} (${transcript.track.kind})\n\n`;
+export type CopyMode =
+  | "plain"
+  | "paragraph"
+  | "segment"
+  | "paragraph-timestamps"
+  | "segment-timestamps"
+  | "markdown";
+
+export interface ExportTextOptions {
+  /** Prefer paragraph grouping when the format allows it. */
+  view: "paragraph" | "segment";
+  timestamps: boolean;
+  metadata: boolean;
+}
+
+const DEFAULT_TEXT_OPTS: ExportTextOptions = {
+  view: "segment",
+  timestamps: true,
+  metadata: true,
+};
+
+function metadataHeader(transcript: Transcript): string {
+  return [
+    transcript.video.title,
+    transcript.video.canonicalUrl,
+    `${transcript.track.languageLabel} (${transcript.track.kind})`,
+    transcript.video.channelName
+      ? `Channel: ${transcript.video.channelName}`
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+/** Export as plain text (optional timestamps / paragraph vs segment). */
+export function exportTxt(
+  transcript: Transcript,
+  opts: Partial<ExportTextOptions> = {},
+): string {
+  const o = { ...DEFAULT_TEXT_OPTS, ...opts };
+  const header = o.metadata ? `${metadataHeader(transcript)}\n\n` : "";
+  if (o.view === "paragraph") {
+    const paragraphs = toParagraphs(transcript.segments);
+    const body = paragraphs
+      .map((p) =>
+        o.timestamps ? `[${formatTimestamp(p.startMs)}] ${p.text}` : p.text,
+      )
+      .join("\n\n");
+    return header + body;
+  }
   const body = transcript.segments
-    .map((s) => `[${formatTimestamp(s.startMs)}] ${s.text}`)
+    .map((s) =>
+      o.timestamps ? `[${formatTimestamp(s.startMs)}] ${s.text}` : s.text,
+    )
     .join("\n");
   return header + body;
 }
 
-/** Export as Markdown with timestamp links */
-export function exportMarkdown(transcript: Transcript): string {
+/** Export as Markdown with optional timestamp links. */
+export function exportMarkdown(
+  transcript: Transcript,
+  opts: Partial<ExportTextOptions> = {},
+): string {
+  const o = { ...DEFAULT_TEXT_OPTS, view: "paragraph" as const, ...opts };
   const videoId = transcript.video.videoId;
-  const header = [
-    `# ${transcript.video.title}`,
-    "",
-    `**URL:** ${transcript.video.canonicalUrl}`,
-    `**Language:** ${transcript.track.languageLabel} (${transcript.track.kind})`,
-    transcript.video.channelName
-      ? `**Channel:** ${transcript.video.channelName}`
-      : "",
-    "",
-    "---",
-    "",
-  ]
-    .filter(Boolean)
-    .join("\n");
+  const header = o.metadata
+    ? [
+        `# ${transcript.video.title}`,
+        "",
+        `**URL:** ${transcript.video.canonicalUrl}`,
+        `**Language:** ${transcript.track.languageLabel} (${transcript.track.kind})`,
+        transcript.video.channelName
+          ? `**Channel:** ${transcript.video.channelName}`
+          : "",
+        "",
+        "---",
+        "",
+      ]
+        .filter(Boolean)
+        .join("\n")
+    : "";
+
+  if (o.view === "segment") {
+    const body = transcript.segments
+      .map((s) => {
+        if (!o.timestamps) return s.text;
+        const url = makeYouTubeTimestampUrl(videoId, s.startMs);
+        return `[${formatTimestamp(s.startMs)}](${url}) ${s.text}`;
+      })
+      .join("\n\n");
+    return header + body;
+  }
 
   const paragraphs = toParagraphs(transcript.segments);
   const body = paragraphs
     .map((p) => {
+      if (!o.timestamps) return p.text;
       const url = makeYouTubeTimestampUrl(videoId, p.startMs);
       return `[${formatTimestamp(p.startMs)}](${url}) ${p.text}`;
     })
     .join("\n\n");
-
   return header + body;
 }
 
@@ -119,6 +186,28 @@ export function exportJson(transcript: Transcript): string {
   );
 }
 
+function csvEscape(value: string): string {
+  if (/[",\n\r]/.test(value)) return `"${value.replace(/"/g, '""')}"`;
+  return value;
+}
+
+/** Export as CSV (one row per segment). */
+export function exportCsv(transcript: Transcript): string {
+  const rows = [
+    ["index", "startMs", "endMs", "timestamp", "text"].join(","),
+    ...transcript.segments.map((s) =>
+      [
+        String(s.index),
+        String(s.startMs),
+        String(s.endMs),
+        formatTimestamp(s.startMs),
+        csvEscape(s.text),
+      ].join(","),
+    ),
+  ];
+  return rows.join("\n");
+}
+
 /** Generate a safe filename for export */
 export function makeExportFilename(
   title: string,
@@ -132,11 +221,40 @@ export function makeExportFilename(
   return `${safe}_${languageCode}.${ext}`;
 }
 
-/** Copy-friendly text variants */
+/** Copy-friendly text variants — output matches the requested granularity. */
+export function copyTranscript(transcript: Transcript, mode: CopyMode): string {
+  switch (mode) {
+    case "plain":
+      return transcript.segments.map((s) => s.text).join(" ");
+    case "paragraph":
+      return toParagraphs(transcript.segments)
+        .map((p) => p.text)
+        .join("\n\n");
+    case "segment":
+      return transcript.segments.map((s) => s.text).join("\n");
+    case "paragraph-timestamps":
+      return toParagraphs(transcript.segments)
+        .map((p) => `[${formatTimestamp(p.startMs)}] ${p.text}`)
+        .join("\n\n");
+    case "segment-timestamps":
+      return transcript.segments
+        .map((s) => `[${formatTimestamp(s.startMs)}] ${s.text}`)
+        .join("\n");
+    case "markdown":
+      return exportMarkdown(transcript, {
+        view: "paragraph",
+        timestamps: true,
+        metadata: true,
+      });
+  }
+}
+
+/** @deprecated Prefer copyTranscript(..., "plain") */
 export function copyPlainText(segments: readonly TranscriptSegment[]): string {
   return segments.map((s) => s.text).join(" ");
 }
 
+/** @deprecated Prefer copyTranscript(..., "segment-timestamps") */
 export function copyWithTimestamps(
   segments: readonly TranscriptSegment[],
 ): string {

@@ -96,6 +96,14 @@ export function snapshotFromPlayerResponse(
       /* ignore */
     }
   }
+  if (!videoId) {
+    try {
+      const shorts = location.pathname.match(/^\/shorts\/([\w-]{11})/);
+      videoId = shorts?.[1] ?? null;
+    } catch {
+      /* ignore */
+    }
+  }
 
   const lenRaw = vd["lengthSeconds"];
   const durationSeconds =
@@ -124,5 +132,16 @@ export function snapshotFromPlayerResponse(
       !!player &&
       typeof player.setOption === "function" &&
       typeof player.getOption === "function",
+    adPlaying: (() => {
+      try {
+        const el = document.querySelector(".html5-video-player");
+        if (el?.classList.contains("ad-showing")) return true;
+        return !!document.querySelector(
+          ".ytp-ad-player-overlay, .ytp-ad-module .ytp-ad-player-overlay-layout",
+        );
+      } catch {
+        return false;
+      }
+    })(),
   };
 }

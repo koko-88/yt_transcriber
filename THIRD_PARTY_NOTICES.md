@@ -10,7 +10,10 @@ this list stays complete and OSI-approved.
 | Package                 | Version range | License | Copyright                           |
 | ----------------------- | ------------- | ------- | ----------------------------------- |
 | @tanstack/react-virtual | ^3.13.0       | MIT     | TanStack contributors               |
+| docx                    | ^9.x          | MIT     | Dolphin Tech / docx.js contributors |
 | idb                     | ^8.0.2        | ISC     | Jake Archibald                      |
+| pdf-lib                 | ^1.x          | MIT     | Andrew Dillon                       |
+| pptxgenjs               | ^3.x          | MIT     | Brent Ely                           |
 | react                   | ^19.1.0       | MIT     | Meta Platforms, Inc. and affiliates |
 | react-dom               | ^19.1.0       | MIT     | Meta Platforms, Inc. and affiliates |
 | zod                     | ^3.25.0       | MIT     | Colin McDonnell                     |

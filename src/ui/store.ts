@@ -71,7 +71,10 @@ interface PanelState {
   setFollow(follow: boolean): void;
   setSearchQuery(q: string): void;
   refreshPageState(): Promise<void>;
-  acquire(trackId?: string): Promise<void>;
+  acquire(
+    trackId?: string,
+    opts?: { allowPlaybackMutation?: boolean },
+  ): Promise<void>;
   seek(timeMs: number): Promise<void>;
   saveCurrentToLibrary(): Promise<void>;
   removeFromLibrary(transcriptId: string): Promise<void>;
@@ -91,11 +94,24 @@ let pageEpoch = 0;
 let acquireEpoch = 0;
 let refreshRetryCount = 0;
 
+const PLAYBACK_POLL_FOLLOW_MS = 250;
+const PLAYBACK_POLL_IDLE_MS = 1000;
+
+/** Follow-mode poll interval (ms). Exported for regression tests. */
+export const FOLLOW_PLAYBACK_POLL_MS = PLAYBACK_POLL_FOLLOW_MS;
+/** Idle / paused poll interval (ms). */
+export const IDLE_PLAYBACK_POLL_MS = PLAYBACK_POLL_IDLE_MS;
+
 function startPlaybackPolling(
   get: () => PanelState,
   set: (partial: Partial<PanelState>) => void,
 ) {
-  followTimer = setInterval(async () => {
+  if (followTimer) {
+    clearInterval(followTimer);
+    followTimer = null;
+  }
+  const tick = async () => {
+    if (typeof document !== "undefined" && document.hidden) return;
     if (!get().videoId) return;
     try {
       const pb = await bus.request<{ timeSeconds: number; playing: boolean }>(
@@ -108,7 +124,30 @@ function startPlaybackPolling(
     } catch {
       /* tab gone */
     }
-  }, 1000);
+  };
+  const schedule = () => {
+    if (followTimer) clearInterval(followTimer);
+    const interval =
+      get().follow || get().playing
+        ? PLAYBACK_POLL_FOLLOW_MS
+        : PLAYBACK_POLL_IDLE_MS;
+    followTimer = setInterval(() => {
+      void tick();
+      // Re-evaluate cadence when follow/playing changes.
+      const next =
+        get().follow || get().playing
+          ? PLAYBACK_POLL_FOLLOW_MS
+          : PLAYBACK_POLL_IDLE_MS;
+      if (next !== interval) schedule();
+    }, interval);
+  };
+  void tick();
+  schedule();
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) void tick();
+    });
+  }
 }
 
 export const usePanelStore = create<PanelState>((set, get) => ({
@@ -205,6 +244,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
   setFollow(follow) {
     set({ follow });
+    // Cadence adjusts on next poll tick via schedule().
   },
   setSearchQuery(searchQuery) {
     set({ searchQuery });
@@ -257,7 +297,10 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         retryTransientFailure();
         return;
       }
-      if (state.availability === "unsupported-page-structure") {
+      if (
+        state.availability === "unsupported-page-structure" ||
+        state.availability === "player-initializing"
+      ) {
         retryTransientFailure();
       } else {
         refreshRetryCount = 0;
@@ -265,7 +308,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       set({
         videoId: state.videoId,
         shellStatus:
-          state.availability === "unsupported-page-structure" &&
+          (state.availability === "unsupported-page-structure" ||
+            state.availability === "player-initializing") &&
           refreshRetryCount < 8
             ? "player-initializing"
             : "ready",
@@ -278,7 +322,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         !get().transcript &&
         !get().loading
       ) {
-        void get().acquire();
+        // Auto-acquire never mutates playback (ads / paused / unmuted stay intact).
+        void get().acquire(undefined, { allowPlaybackMutation: false });
       }
     } catch (e) {
       logger.warn("panel", "video context or content routing failed", {
@@ -299,18 +344,17 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     }
   },
 
-  async acquire(trackId) {
+  async acquire(trackId, opts) {
     const expectedVideoId = get().videoId;
     if (!expectedVideoId) return;
     const epoch = ++acquireEpoch;
     set({ loading: true, transcript: null });
     try {
-      const raw = await bus.request<unknown>(
-        "acq.acquire",
-        trackId
-          ? { trackId, videoId: expectedVideoId }
-          : { videoId: expectedVideoId },
-      );
+      const raw = await bus.request<unknown>("acq.acquire", {
+        videoId: expectedVideoId,
+        ...(trackId ? { trackId } : {}),
+        allowPlaybackMutation: opts?.allowPlaybackMutation === true,
+      });
       const parsed = AcquisitionResultSchema.safeParse(raw);
       if (!parsed.success) throw new Error("malformed acquisition result");
       const result: AcquisitionResult = parsed.data;
@@ -322,6 +366,17 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           tracks: [...result.tracks],
           availability: "available",
         });
+      } else if (result.reason === "player-initializing") {
+        set({ availability: result.reason, transcript: null });
+        // Bound ad/startup waits via the shared refresh retry budget (max 8).
+        if (epoch === acquireEpoch && refreshRetryCount < 8) {
+          const delay = 400 * ++refreshRetryCount;
+          setTimeout(() => {
+            if (epoch === acquireEpoch && get().videoId === expectedVideoId) {
+              void get().refreshPageState();
+            }
+          }, delay);
+        }
       } else {
         set({ availability: result.reason, transcript: null });
       }

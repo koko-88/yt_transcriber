@@ -6,32 +6,13 @@ import { usePanelStore } from "../store.js";
 import { bus } from "../../platform/messaging.js";
 import { searchSegments, findHighlightRanges } from "../../core/search.js";
 import { toParagraphs } from "../../core/paragraphs.js";
-import {
-  formatTimestamp,
-  copyPlainText,
-  copyWithTimestamps,
-  exportTxt,
-  exportMarkdown,
-  exportSrt,
-  exportVtt,
-  exportJson,
-  makeExportFilename,
-} from "../../core/export.js";
+import { formatTimestamp } from "../../core/export.js";
+import { findActiveItemIndex } from "../../core/playback-index.js";
+import { ActionsMenu } from "../components/ActionsMenu.js";
 import type { TranscriptSegment } from "../../core/model.js";
 import type { Availability } from "../../core/result.js";
 import type { MessageKey } from "../../core/i18n.js";
 import type { ShellStatus } from "../store.js";
-
-function download(filename: string, content: string, mime: string): void {
-  const blob = new Blob([content], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  // Keep the object URL alive until the browser has claimed a large download.
-  setTimeout(() => URL.revokeObjectURL(url), 60_000);
-}
 
 const AVAILABILITY_KEYS: Record<Availability, MessageKey> = {
   available: "availability.available",
@@ -49,6 +30,7 @@ const AVAILABILITY_KEYS: Record<Availability, MessageKey> = {
   "unsupported-page-structure": "availability.unsupported-page-structure",
   "network-error": "availability.network-error",
   "player-state-restore-failed": "availability.player-state-restore-failed",
+  "player-initializing": "availability.player-initializing",
   unknown: "availability.unknown",
 };
 
@@ -152,23 +134,21 @@ export function TranscriptView() {
   });
 
   // Follow playback: scroll to the active segment OR paragraph row.
+  const lastFollowIdx = useRef(-1);
   useEffect(() => {
     if (!s.follow || !transcript || itemCount === 0) return;
-    if (s.viewMode === "paragraph") {
-      const idx = paragraphs.findIndex(
-        (p) => s.playbackMs >= p.startMs && s.playbackMs < p.endMs,
-      );
-      if (idx >= 0)
-        virtualizer.scrollToIndex(idx, { align: "center", behavior: "smooth" });
-      return;
-    }
-    const idx = filtered.findIndex(
-      (seg) => s.playbackMs >= seg.startMs && s.playbackMs < seg.endMs,
-    );
-    if (idx >= 0)
-      virtualizer.scrollToIndex(idx, { align: "center", behavior: "smooth" });
+    const items = s.viewMode === "paragraph" ? paragraphs : filtered;
+    const idx = findActiveItemIndex(items, s.playbackMs);
+    if (idx < 0 || idx === lastFollowIdx.current) return;
+    lastFollowIdx.current = idx;
+    // Instant jump avoids smooth-scroll fighting rapid poll updates.
+    virtualizer.scrollToIndex(idx, { align: "center", behavior: "auto" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.playbackMs, s.follow, s.viewMode, paragraphs, filtered]);
+
+  useEffect(() => {
+    lastFollowIdx.current = -1;
+  }, [s.viewMode, transcript?.id]);
 
   if (
     s.shellStatus !== "ready" ||
@@ -199,6 +179,9 @@ export function TranscriptView() {
         {s.shellStatus === "ready" &&
           s.videoId &&
           !s.loading &&
+          s.availability !== "no-captions" &&
+          s.availability !== "player-initializing" &&
+          s.availability !== "not-a-video-page" &&
           (s.availability === "available" ||
             s.availability === "available-partial" ||
             s.availability === "fetch-empty" ||
@@ -208,7 +191,12 @@ export function TranscriptView() {
             s.availability === "parse-failed" ||
             s.availability === "unknown" ||
             s.availability === "unsupported-page-structure") && (
-            <button className="btn primary" onClick={() => void s.acquire()}>
+            <button
+              className="btn primary"
+              onClick={() =>
+                void s.acquire(undefined, { allowPlaybackMutation: true })
+              }
+            >
               {s.tr(
                 s.availability === "available"
                   ? "transcript.get"
@@ -219,48 +207,6 @@ export function TranscriptView() {
       </div>
     );
   }
-
-  const doExport = (format: string) => {
-    const title = transcript.video.title;
-    const lang = transcript.track.languageCode;
-    switch (format) {
-      case "txt":
-        download(
-          makeExportFilename(title, lang, "txt"),
-          exportTxt(transcript),
-          "text/plain",
-        );
-        break;
-      case "md":
-        download(
-          makeExportFilename(title, lang, "md"),
-          exportMarkdown(transcript),
-          "text/markdown",
-        );
-        break;
-      case "srt":
-        download(
-          makeExportFilename(title, lang, "srt"),
-          exportSrt(transcript.segments),
-          "application/x-subrip",
-        );
-        break;
-      case "vtt":
-        download(
-          makeExportFilename(title, lang, "vtt"),
-          exportVtt(transcript.segments),
-          "text/vtt",
-        );
-        break;
-      case "json":
-        download(
-          makeExportFilename(title, lang, "json"),
-          exportJson(transcript),
-          "application/json",
-        );
-        break;
-    }
-  };
 
   return (
     <div className="view transcript-view">
@@ -341,77 +287,24 @@ export function TranscriptView() {
           >
             {s.tr("transcript.follow")}
           </button>
-          <details className="action-menu">
-            <summary className="btn">{s.tr("transcript.actions")}</summary>
-            <div className="action-popover">
-              <button
-                type="button"
-                className="btn"
-                onClick={() =>
-                  void navigator.clipboard.writeText(
-                    copyPlainText(transcript.segments),
-                  )
-                }
-              >
-                {s.tr("transcript.copy.text")}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() =>
-                  void navigator.clipboard.writeText(
-                    copyWithTimestamps(transcript.segments),
-                  )
-                }
-              >
-                {s.tr("transcript.copy.timestamps")}
-              </button>
-              {s.videoId && !s.savedVideoIds.has(s.videoId) && (
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => void s.saveCurrentToLibrary()}
-                >
-                  {s.tr("library.save")}
-                </button>
-              )}
-              <button
-                type="button"
-                className="btn"
-                onClick={() => {
-                  const text = window.prompt(s.tr("notes.placeholder"));
-                  if (!text?.trim()) return;
-                  void bus.request("notes.upsert", {
-                    id: crypto.randomUUID(),
-                    videoId: transcript.video.videoId,
-                    transcriptId: transcript.id,
-                    text: text.trim(),
-                    startMs: s.playbackMs,
-                  });
-                }}
-              >
-                {s.tr("notes.add")}
-              </button>
-              <label htmlFor="transcript-export">
-                {s.tr("transcript.export")}
-              </label>
-              <select
-                id="transcript-export"
-                value=""
-                onChange={(e) => {
-                  if (e.target.value) doExport(e.target.value);
-                  e.target.value = "";
-                }}
-              >
-                <option value="">{s.tr("transcript.export")}</option>
-                <option value="txt">{s.tr("transcript.export.txt")}</option>
-                <option value="md">{s.tr("transcript.export.md")}</option>
-                <option value="srt">{s.tr("transcript.export.srt")}</option>
-                <option value="vtt">{s.tr("transcript.export.vtt")}</option>
-                <option value="json">{s.tr("transcript.export.json")}</option>
-              </select>
-            </div>
-          </details>
+          <ActionsMenu
+            transcript={transcript}
+            viewMode={s.viewMode}
+            tr={s.tr}
+            canSave={!!s.videoId && !s.savedVideoIds.has(s.videoId)}
+            onSave={() => void s.saveCurrentToLibrary()}
+            onAddNote={() => {
+              const text = window.prompt(s.tr("notes.placeholder"));
+              if (!text?.trim()) return;
+              void bus.request("notes.upsert", {
+                id: crypto.randomUUID(),
+                videoId: transcript.video.videoId,
+                transcriptId: transcript.id,
+                text: text.trim(),
+                startMs: s.playbackMs,
+              });
+            }}
+          />
         </div>
       </div>
 
@@ -423,16 +316,18 @@ export function TranscriptView() {
                 count: transcript.segments.length,
               })}
         </span>
-        {!s.follow && s.playbackMs > 0 && (
+        {!s.follow && (
           <button
             type="button"
             className="text-action"
             onClick={() => {
-              const idx = filtered.findIndex(
-                (seg) =>
-                  s.playbackMs >= seg.startMs && s.playbackMs < seg.endMs,
-              );
-              if (idx >= 0) virtualizer.scrollToIndex(idx, { align: "center" });
+              const items = s.viewMode === "paragraph" ? paragraphs : filtered;
+              const idx = findActiveItemIndex(items, s.playbackMs);
+              if (idx >= 0)
+                virtualizer.scrollToIndex(idx, {
+                  align: "center",
+                  behavior: "auto",
+                });
             }}
           >
             {s.tr("transcript.jumpToNow")}
@@ -453,85 +348,90 @@ export function TranscriptView() {
           className="transcript-list"
           style={{ height: virtualizer.getTotalSize() }}
         >
-          {virtualizer.getVirtualItems().map((vi) => {
-            const style: React.CSSProperties = {
-              position: "absolute",
-              top: 0,
-              insetInlineStart: 0,
-              width: "100%",
-              transform: `translateY(${vi.start}px)`,
-            };
-            if (s.viewMode === "paragraph") {
-              const p = paragraphs[vi.index];
-              if (!p) return null;
-              const paraRanges = s.searchQuery.trim()
-                ? findHighlightRanges(p.text, s.searchQuery)
-                : [];
-              const active =
-                s.playbackMs >= p.startMs && s.playbackMs < p.endMs;
+          {(() => {
+            const timedItems =
+              s.viewMode === "paragraph" ? paragraphs : filtered;
+            const activeIndex = findActiveItemIndex(timedItems, s.playbackMs);
+            return virtualizer.getVirtualItems().map((vi) => {
+              const style: React.CSSProperties = {
+                position: "absolute",
+                top: 0,
+                insetInlineStart: 0,
+                width: "100%",
+                transform: `translateY(${vi.start}px)`,
+              };
+              if (s.viewMode === "paragraph") {
+                const p = paragraphs[vi.index];
+                if (!p) return null;
+                const paraRanges = s.searchQuery.trim()
+                  ? findHighlightRanges(p.text, s.searchQuery)
+                  : [];
+                const active = vi.index === activeIndex;
+                return (
+                  <p
+                    key={vi.key}
+                    className={`paragraph${active ? " active" : ""}`}
+                    style={style}
+                    ref={virtualizer.measureElement}
+                    data-index={vi.index}
+                  >
+                    <button
+                      className="ts"
+                      aria-current={active ? "true" : undefined}
+                      onClick={() => void s.seek(p.startMs)}
+                    >
+                      {formatTimestamp(p.startMs)}
+                    </button>
+                    <HighlightedText text={p.text} ranges={paraRanges} />
+                  </p>
+                );
+              }
+              const seg = filtered[vi.index];
+              if (!seg) return null;
+              const active = vi.index === activeIndex;
+              const highlighted = highlightIds.has(seg.index);
               return (
-                <p
+                <button
                   key={vi.key}
-                  className={`paragraph${active ? " active" : ""}`}
+                  className={`segment${active ? " active" : ""}${highlighted ? " highlighted" : ""}`}
                   style={style}
                   ref={virtualizer.measureElement}
                   data-index={vi.index}
+                  aria-current={active ? "true" : undefined}
+                  onClick={(e) => {
+                    if (e.altKey && transcript) {
+                      const id = crypto.randomUUID();
+                      void bus
+                        .request("highlights.upsert", {
+                          id,
+                          videoId: transcript.video.videoId,
+                          transcriptId: transcript.id,
+                          startMs: seg.startMs,
+                          endMs: seg.endMs,
+                          color: "var(--ui-accent)",
+                          createdAt: Date.now(),
+                        })
+                        .then(() =>
+                          setHighlightIds((prev) =>
+                            new Set(prev).add(seg.index),
+                          ),
+                        );
+                      return;
+                    }
+                    void s.seek(seg.startMs);
+                  }}
                 >
-                  <button
-                    className="ts"
-                    aria-current={active ? "true" : undefined}
-                    onClick={() => void s.seek(p.startMs)}
-                  >
-                    {formatTimestamp(p.startMs)}
-                  </button>
-                  <HighlightedText text={p.text} ranges={paraRanges} />
-                </p>
+                  <span className="ts">{formatTimestamp(seg.startMs)}</span>
+                  <span>
+                    <HighlightedText
+                      text={seg.text}
+                      ranges={rangeByIndex.get(seg.index) ?? []}
+                    />
+                  </span>
+                </button>
               );
-            }
-            const seg = filtered[vi.index];
-            if (!seg) return null;
-            const active =
-              s.playbackMs >= seg.startMs && s.playbackMs < seg.endMs;
-            const highlighted = highlightIds.has(seg.index);
-            return (
-              <button
-                key={vi.key}
-                className={`segment${active ? " active" : ""}${highlighted ? " highlighted" : ""}`}
-                style={style}
-                ref={virtualizer.measureElement}
-                data-index={vi.index}
-                aria-current={active ? "true" : undefined}
-                onClick={(e) => {
-                  if (e.altKey && transcript) {
-                    const id = crypto.randomUUID();
-                    void bus
-                      .request("highlights.upsert", {
-                        id,
-                        videoId: transcript.video.videoId,
-                        transcriptId: transcript.id,
-                        startMs: seg.startMs,
-                        endMs: seg.endMs,
-                        color: "var(--ui-accent)",
-                        createdAt: Date.now(),
-                      })
-                      .then(() =>
-                        setHighlightIds((prev) => new Set(prev).add(seg.index)),
-                      );
-                    return;
-                  }
-                  void s.seek(seg.startMs);
-                }}
-              >
-                <span className="ts">{formatTimestamp(seg.startMs)}</span>
-                <span>
-                  <HighlightedText
-                    text={seg.text}
-                    ranges={rangeByIndex.get(seg.index) ?? []}
-                  />
-                </span>
-              </button>
-            );
-          })}
+            });
+          })()}
         </div>
       </div>
     </div>

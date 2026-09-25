@@ -158,6 +158,26 @@ describe("whole-track acquisition", () => {
     expect(result).toMatchObject({ ok: false, reason: "no-captions" });
     expect(actions).toEqual([]);
   });
+
+  it("does not mute or play during ads — returns player-initializing", async () => {
+    const snap = {
+      ...snapshot([{ languageCode: "en", baseUrl: captionUrl() }]),
+      adPlaying: true,
+    };
+    const { bridge, actions } = bridgeFor(snap);
+    const result = await acquireTranscript({
+      bridge,
+      videoId,
+      signal: new AbortController().signal,
+      preferredLangs: ["en"],
+      allowPlaybackMutation: false,
+      fetchCaption: async () => {
+        throw new Error("must not fetch during ads");
+      },
+    });
+    expect(result).toMatchObject({ ok: false, reason: "player-initializing" });
+    expect(actions).toEqual([]);
+  });
 });
 
 describe("completeness evidence", () => {

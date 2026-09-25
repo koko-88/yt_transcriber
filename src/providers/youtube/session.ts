@@ -180,7 +180,7 @@ export function startYouTubeSession(): void {
       if (snapshot.videoId !== videoId)
         return {
           videoId,
-          availability: "unsupported-page-structure",
+          availability: "player-initializing",
           tracks: [],
           metadata: null,
         };
@@ -198,6 +198,7 @@ export function startYouTubeSession(): void {
     z.object({
       trackId: z.string().optional(),
       videoId: z.string().optional(),
+      allowPlaybackMutation: z.boolean().optional(),
     }),
     ["extension-page"],
     async (payload): Promise<AcquisitionResult> => {
@@ -216,7 +217,7 @@ export function startYouTubeSession(): void {
           diagnostics: [],
         };
       }
-      const key = `${videoId}:${payload.trackId ?? "auto"}`;
+      const key = `${videoId}:${payload.trackId ?? "auto"}:${payload.allowPlaybackMutation ? "mut" : "safe"}`;
       for (;;) {
         if (inFlight?.key === key) return inFlight.promise;
         if (inFlight) cancelInFlight("superseded");
@@ -242,6 +243,7 @@ export function startYouTubeSession(): void {
             signal: controller.signal,
             preferredLangs: [...navigator.languages],
             ...(payload.trackId ? { requestedTrackId: payload.trackId } : {}),
+            allowPlaybackMutation: payload.allowPlaybackMutation === true,
           });
         } finally {
           clearInFlight(controller);

@@ -9,6 +9,8 @@ const AGE_REASONS = /age|confirm your age|content warning/i;
 const MEMBER_REASONS = /member|join this channel|sponsor/i;
 
 export function mapSnapshotToAvailability(snap: PlayerSnapshot): Availability {
+  if (snap.adPlaying) return "player-initializing";
+
   const status = snap.playabilityStatus ?? "";
   const reason = snap.playabilityReason ?? "";
 
@@ -41,6 +43,7 @@ export const RETRYABLE: ReadonlySet<Availability> = new Set([
   "needs-player-interaction",
   "network-error",
   "player-state-restore-failed",
+  "player-initializing",
   "unsupported-page-structure",
   "unknown",
 ]);

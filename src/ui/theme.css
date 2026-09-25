@@ -339,18 +339,19 @@ select:focus {
 .action-menu {
   position: relative;
 }
-.action-menu > summary {
-  list-style: none;
-}
-.action-menu > summary::-webkit-details-marker {
-  display: none;
+.action-trigger {
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
 }
 .action-popover {
   position: absolute;
-  z-index: 10;
+  z-index: 20;
   inset-block-start: calc(100% + var(--core-space-4));
   inset-inline-end: 0;
-  inline-size: min(260px, calc(100vw - 32px));
+  inline-size: min(280px, calc(100vw - 24px));
+  max-block-size: min(70vh, 420px);
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: var(--core-space-4);
@@ -360,16 +361,29 @@ select:focus {
   background: var(--ui-canvas);
   box-shadow: 0 4px 16px rgb(0 0 0 / 0.18);
 }
-.action-popover button {
+.action-popover .btn {
   inline-size: 100%;
   justify-content: flex-start;
+  cursor: pointer;
+  user-select: none;
 }
-.action-popover label {
+.action-section-label,
+.action-hint,
+.action-status {
   color: var(--ui-muted);
   font-size: var(--semantic-type-caption);
+  padding-inline: var(--core-space-4);
 }
-.action-popover select {
-  inline-size: 100%;
+.action-check {
+  display: flex;
+  align-items: center;
+  gap: var(--core-space-6);
+  font-size: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+.action-back {
+  font-weight: 600;
 }
 .transcript-summary {
   display: flex;

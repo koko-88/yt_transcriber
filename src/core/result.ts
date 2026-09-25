@@ -20,6 +20,7 @@ export type Availability =
   | "unsupported-page-structure"
   | "network-error"
   | "player-state-restore-failed"
+  | "player-initializing"
   | "unknown";
 
 /** Diagnostic information from an acquisition stage */

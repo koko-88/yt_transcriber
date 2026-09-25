@@ -75,6 +75,8 @@ export const PlayerSnapshotSchema = z.object({
   playabilityReason: z.string().max(300).nullable(),
   tracks: z.array(BridgeTrackSchema).max(500),
   captionsApiAvailable: z.boolean(),
+  /** True while a YouTube ad overlay is showing over the player. */
+  adPlaying: z.boolean().optional(),
 });
 export type PlayerSnapshot = z.infer<typeof PlayerSnapshotSchema>;
 
