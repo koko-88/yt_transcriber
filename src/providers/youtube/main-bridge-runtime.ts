@@ -79,26 +79,38 @@ function getPlayer(): YtPlayerRt | null {
     const reels = [...document.querySelectorAll("ytd-reel-video-renderer")];
     // Shorts keeps adjacent reels mounted. Prefer the reel whose player reports
     // the URL's video ID; only then fall back to the active visible reel.
-    const players = reels.map((reel) => ({
-      reel,
-      player: reel.querySelector("#movie_player, #shorts-player, .html5-video-player") as unknown as YtPlayerRt | null,
-    })).filter((item) => item.player);
+    const players = reels
+      .map((reel) => ({
+        reel,
+        player: reel.querySelector(
+          "#movie_player, #shorts-player, .html5-video-player",
+        ) as unknown as YtPlayerRt | null,
+      }))
+      .filter((item) => item.player);
     const matching = players.find(({ player }) => {
-      try { return playerVideoId(player!) === target; } catch { return false; }
+      try {
+        return playerVideoId(player!) === target;
+      } catch {
+        return false;
+      }
     });
     if (matching) return matching.player;
-    const active = players.find(({ reel }) =>
-      (reel.hasAttribute("is-active") || reel.hasAttribute("active")) &&
-      reel.getBoundingClientRect().height > 0,
+    const active = players.find(
+      ({ reel }) =>
+        (reel.hasAttribute("is-active") || reel.hasAttribute("active")) &&
+        reel.getBoundingClientRect().height > 0,
     );
     if (active) return active.player;
-    const visible = players.filter(({ reel }) => reel.getBoundingClientRect().height > 0)
+    const visible = players
+      .filter(({ reel }) => reel.getBoundingClientRect().height > 0)
       .sort((a, b) => {
         const center = window.innerHeight / 2;
         const ar = a.reel.getBoundingClientRect();
         const br = b.reel.getBoundingClientRect();
-        return Math.abs(ar.top + ar.height / 2 - center) -
-          Math.abs(br.top + br.height / 2 - center);
+        return (
+          Math.abs(ar.top + ar.height / 2 - center) -
+          Math.abs(br.top + br.height / 2 - center)
+        );
       })[0];
     if (visible) return visible.player;
   }
@@ -184,7 +196,9 @@ function captureOriginalState(player: YtPlayerRt): void {
 function playerVideoId(player: YtPlayerRt): string | null {
   const response = player.getPlayerResponse?.() as
     { videoDetails?: { videoId?: string } } | undefined;
-  return response?.videoDetails?.videoId ?? player.getVideoData?.()?.video_id ?? null;
+  return (
+    response?.videoDetails?.videoId ?? player.getVideoData?.()?.video_id ?? null
+  );
 }
 
 async function handleEnableTrack(
@@ -444,7 +458,9 @@ async function handle(req: BridgeRequest): Promise<void> {
       try {
         if (player.seekTo) player.seekTo(sp.seconds, true);
         else {
-          const media = (player as unknown as Element).querySelector?.("video") as HTMLVideoElement | null;
+          const media = (player as unknown as Element).querySelector?.(
+            "video",
+          ) as HTMLVideoElement | null;
           if (!media) throw new Error("no-seekable-media");
           media.currentTime = sp.seconds;
         }
@@ -459,10 +475,14 @@ async function handle(req: BridgeRequest): Promise<void> {
         respond(req, false, undefined, "no-player");
         return;
       }
-      const media = (player as unknown as Element).querySelector?.("video") as HTMLVideoElement | null;
+      const media = (player as unknown as Element).querySelector?.(
+        "video",
+      ) as HTMLVideoElement | null;
       respond(req, true, {
         timeSeconds: player.getCurrentTime?.() ?? media?.currentTime ?? 0,
-        playing: player.getPlayerState ? player.getPlayerState() === 1 : !!media && !media.paused,
+        playing: player.getPlayerState
+          ? player.getPlayerState() === 1
+          : !!media && !media.paused,
       });
       return;
     }

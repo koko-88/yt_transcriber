@@ -336,20 +336,20 @@ select:focus {
   color: var(--ui-text);
   box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
 }
-  .action-menu {
-    position: relative;
-    display: flex;
-    gap: var(--core-space-4);
-  }
-  .action-view-choice {
-    display: flex;
-    gap: var(--core-space-4);
-  }
-  .action-view-choice .btn[aria-pressed="true"],
-  .action-export-entry {
-    font-weight: 700;
-    background: var(--ui-surface);
-  }
+.action-menu {
+  position: relative;
+  display: flex;
+  gap: var(--core-space-4);
+}
+.action-view-choice {
+  display: flex;
+  gap: var(--core-space-4);
+}
+.action-view-choice .btn[aria-pressed="true"],
+.action-export-entry {
+  font-weight: 700;
+  background: var(--ui-surface);
+}
 .action-trigger {
   cursor: pointer;
   user-select: none;

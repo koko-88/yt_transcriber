@@ -21,9 +21,15 @@ function checkAbort(signal: AbortSignal): void {
   if (signal.aborted) throw new DOMException("Cancelled", "AbortError");
 }
 
-async function resampleMono(pcm: Float32Array, sampleRate: number): Promise<Float32Array> {
+async function resampleMono(
+  pcm: Float32Array,
+  sampleRate: number,
+): Promise<Float32Array> {
   if (sampleRate === STT_SAMPLE_RATE) return pcm;
-  const frames = Math.max(1, Math.round(pcm.length * STT_SAMPLE_RATE / sampleRate));
+  const frames = Math.max(
+    1,
+    Math.round((pcm.length * STT_SAMPLE_RATE) / sampleRate),
+  );
   const context = new OfflineAudioContext(1, frames, STT_SAMPLE_RATE);
   const buffer = context.createBuffer(1, pcm.length, sampleRate);
   buffer.getChannelData(0).set(pcm);
@@ -41,14 +47,16 @@ export async function* readPcmWindows(
   signal: AbortSignal,
 ): AsyncGenerator<PcmWindow> {
   const url = safeMediaUrl(source.url);
-  if (!url) throw new Error("Audio source is outside the allowed YouTube media host");
+  if (!url)
+    throw new Error("Audio source is outside the allowed YouTube media host");
   const input = new Input({
     formats: [MP4, WEBM],
     source: new UrlSource(url, {
       maxCacheSize: 8 * 1024 * 1024,
       parallelism: 2,
       requestInit: { credentials: "omit" },
-      getRetryDelay: (attempt) => attempt < 3 ? Math.min(2 ** attempt, 4) : null,
+      getRetryDelay: (attempt) =>
+        attempt < 3 ? Math.min(2 ** attempt, 4) : null,
     }),
   });
   const dispose = () => input.dispose();
@@ -56,9 +64,11 @@ export async function* readPcmWindows(
   try {
     checkAbort(signal);
     const track = await input.getPrimaryAudioTrack();
-    if (!track || !await track.canDecode()) throw new Error("No decodable audio track in the media source");
+    if (!track || !(await track.canDecode()))
+      throw new Error("No decodable audio track in the media source");
     const sampleRate = await track.getSampleRate();
-    if (!Number.isFinite(sampleRate) || sampleRate <= 0) throw new Error("Invalid audio sample rate");
+    if (!Number.isFinite(sampleRate) || sampleRate <= 0)
+      throw new Error("Invalid audio sample rate");
     const durationSeconds = await track.getDurationFromMetadata();
     const windowFrames = Math.round(WINDOW_SECONDS * sampleRate);
     const overlapFrames = Math.round(OVERLAP_SECONDS * sampleRate);
@@ -71,20 +81,27 @@ export async function* readPcmWindows(
 
     for await (const { buffer, timestamp } of sink.buffers()) {
       checkAbort(signal);
-      if (buffer.sampleRate !== sampleRate) throw new Error("Audio sample rate changed during decode");
+      if (buffer.sampleRate !== sampleRate)
+        throw new Error("Audio sample rate changed during decode");
       const sampleStart = Math.round(timestamp * sampleRate);
       const sampleEnd = sampleStart + buffer.length;
-      const planes = Array.from({ length: buffer.numberOfChannels }, (_, channel) =>
-        buffer.getChannelData(channel));
+      const planes = Array.from(
+        { length: buffer.numberOfChannels },
+        (_, channel) => buffer.getChannelData(channel),
+      );
       let cursor = Math.max(sampleStart, previousEnd, windowStart, 0);
       while (cursor < sampleEnd) {
         checkAbort(signal);
         if (cursor >= windowStart + windowFrames) {
           const audio = await resampleMono(pcm, sampleRate);
           checkAbort(signal);
-          yield { audio, startSeconds: windowStart / sampleRate,
+          yield {
+            audio,
+            startSeconds: windowStart / sampleRate,
             endSeconds: (windowStart + windowFrames) / sampleRate,
-            isLast: false, durationSeconds };
+            isLast: false,
+            durationSeconds,
+          };
           pcm.copyWithin(0, hopFrames, windowFrames);
           pcm.fill(0, overlapFrames);
           windowStart += hopFrames;
@@ -106,10 +123,18 @@ export async function* readPcmWindows(
     checkAbort(signal);
     const end = Math.min(writtenEnd, windowStart + windowFrames);
     if (end > windowStart + (windowStart === 0 ? 0 : overlapFrames)) {
-      const audio = await resampleMono(pcm.slice(0, end - windowStart), sampleRate);
+      const audio = await resampleMono(
+        pcm.slice(0, end - windowStart),
+        sampleRate,
+      );
       checkAbort(signal);
-      yield { audio, startSeconds: windowStart / sampleRate, endSeconds: end / sampleRate,
-        isLast: true, durationSeconds };
+      yield {
+        audio,
+        startSeconds: windowStart / sampleRate,
+        endSeconds: end / sampleRate,
+        isLast: true,
+        durationSeconds,
+      };
     }
   } finally {
     signal.removeEventListener("abort", dispose);

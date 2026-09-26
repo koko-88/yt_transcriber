@@ -58,7 +58,8 @@ interface PanelState {
   follow: boolean;
   playbackMs: number;
   playing: boolean;
-  sttPhase: "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
+  sttPhase:
+    "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
   sttProgress: number;
   sttError: string | null;
   searchQuery: string;
@@ -115,21 +116,38 @@ async function startPlaybackStream(
   playbackPort = null;
   if (document.hidden || !get().videoId) return;
   try {
-    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    const [tab] = await browser.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
     if (!tab?.id || document.hidden || !get().videoId) return;
     const port = browser.tabs.connect(tab.id, { name: "ytt-playback" });
     playbackPort = port;
     port.postMessage({ follow: get().follow });
     port.onMessage.addListener((raw: unknown) => {
-      const sample = raw as { videoId?: string; timeSeconds?: number; playing?: boolean };
-      if (document.hidden || sample.videoId !== get().videoId ||
-          !Number.isFinite(sample.timeSeconds) || typeof sample.playing !== "boolean") return;
-      set({ playbackMs: Math.round(sample.timeSeconds! * 1000), playing: sample.playing });
+      const sample = raw as {
+        videoId?: string;
+        timeSeconds?: number;
+        playing?: boolean;
+      };
+      if (
+        document.hidden ||
+        sample.videoId !== get().videoId ||
+        !Number.isFinite(sample.timeSeconds) ||
+        typeof sample.playing !== "boolean"
+      )
+        return;
+      set({
+        playbackMs: Math.round(sample.timeSeconds! * 1000),
+        playing: sample.playing,
+      });
     });
     port.onDisconnect.addListener(() => {
       if (playbackPort === port) playbackPort = null;
     });
-  } catch { /* content script may still be initializing */ }
+  } catch {
+    /* content script may still be initializing */
+  }
 }
 
 export const usePanelStore = create<PanelState>((set, get) => ({
@@ -208,16 +226,23 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       }
       if (msg?.type === "stt.update") {
         const update = msg.payload as unknown as {
-          videoId?: string; phase?: PanelState["sttPhase"]; progress?: number;
-          error?: string; transcript?: unknown;
+          videoId?: string;
+          phase?: PanelState["sttPhase"];
+          progress?: number;
+          error?: string;
+          transcript?: unknown;
         };
         if (update.videoId !== get().videoId) return;
-        const parsed = update.transcript ? TranscriptSchema.safeParse(update.transcript) : null;
+        const parsed = update.transcript
+          ? TranscriptSchema.safeParse(update.transcript)
+          : null;
         set({
           sttPhase: update.phase ?? "idle",
           sttProgress: Number.isFinite(update.progress) ? update.progress! : 0,
           sttError: update.error ?? null,
-          ...(parsed?.success ? { transcript: parsed.data, availability: "available" as const } : {}),
+          ...(parsed?.success
+            ? { transcript: parsed.data, availability: "available" as const }
+            : {}),
         });
       }
     });
@@ -332,8 +357,11 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       ) {
         // Auto-acquire never mutates playback (ads / paused / unmuted stay intact).
         void get().acquire(undefined, { allowPlaybackMutation: false });
-      } else if (state.availability === "no-captions" && !get().transcript &&
-                 get().sttPhase === "idle") {
+      } else if (
+        state.availability === "no-captions" &&
+        !get().transcript &&
+        get().sttPhase === "idle"
+      ) {
         void get().startTranscription();
       }
     } catch (e) {
@@ -419,18 +447,36 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     if (!videoId) return;
     set({ sttPhase: "preparing", sttProgress: 0, sttError: null });
     try {
-      const existing = await bus.request<{ videoId: string | null; phase: PanelState["sttPhase"]; progress: number; transcript?: unknown }>("stt.status", { videoId });
+      const existing = await bus.request<{
+        videoId: string | null;
+        phase: PanelState["sttPhase"];
+        progress: number;
+        transcript?: unknown;
+      }>("stt.status", { videoId });
       if (get().videoId !== videoId) return;
-      const result = existing.videoId === videoId && existing.phase !== "cancelled" && existing.phase !== "error"
-        ? existing
-        : await bus.request<typeof existing>("stt.start", { videoId });
+      const result =
+        existing.videoId === videoId &&
+        existing.phase !== "cancelled" &&
+        existing.phase !== "error"
+          ? existing
+          : await bus.request<typeof existing>("stt.start", { videoId });
       if (get().videoId !== videoId) return;
-      const parsed = result.transcript ? TranscriptSchema.safeParse(result.transcript) : null;
-      set({ sttPhase: result.phase, sttProgress: result.progress,
-        ...(parsed?.success ? { transcript: parsed.data, availability: "available" as const } : {}) });
+      const parsed = result.transcript
+        ? TranscriptSchema.safeParse(result.transcript)
+        : null;
+      set({
+        sttPhase: result.phase,
+        sttProgress: result.progress,
+        ...(parsed?.success
+          ? { transcript: parsed.data, availability: "available" as const }
+          : {}),
+      });
     } catch (error) {
       if (get().videoId === videoId)
-        set({ sttPhase: "error", sttError: error instanceof Error ? error.message : String(error) });
+        set({
+          sttPhase: "error",
+          sttError: error instanceof Error ? error.message : String(error),
+        });
     }
   },
   async cancelTranscription() {

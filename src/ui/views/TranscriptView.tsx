@@ -144,10 +144,16 @@ export function TranscriptView() {
     lastFollowIdx.current = idx;
     if (performance.now() < manualScrollUntil.current) return;
     const viewport = parentRef.current;
-    const row = virtualizer.getVirtualItems().find((item) => item.index === idx);
-    if (viewport && row &&
-        row.start >= viewport.scrollTop + viewport.clientHeight * 0.2 &&
-        row.end <= viewport.scrollTop + viewport.clientHeight * 0.8) return;
+    const row = virtualizer
+      .getVirtualItems()
+      .find((item) => item.index === idx);
+    if (
+      viewport &&
+      row &&
+      row.start >= viewport.scrollTop + viewport.clientHeight * 0.2 &&
+      row.end <= viewport.scrollTop + viewport.clientHeight * 0.8
+    )
+      return;
     virtualizer.scrollToIndex(idx, { align: "center", behavior: "auto" });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [s.playbackMs, s.follow, s.viewMode, paragraphs, filtered]);
@@ -170,21 +176,35 @@ export function TranscriptView() {
         {s.loading && <span className="spinner" aria-hidden="true" />}
         <h2>{s.tr("nav.transcript")}</h2>
         <p role="status">
-          {s.loading ? s.tr("transcript.loading") :
-            s.availability === "no-captions" && s.sttPhase === "preparing" ? s.tr("transcript.stt.preparing") :
-            s.availability === "no-captions" && s.sttPhase === "transcribing" ?
-              `${s.tr("transcript.stt.transcribing")} ${Math.round(s.sttProgress * 100)}%` :
-            s.availability === "no-captions" && s.sttPhase === "error" ?
-              `${s.tr("transcript.stt.error")} ${s.sttError ?? ""}` : s.tr(key)}
+          {s.loading
+            ? s.tr("transcript.loading")
+            : s.availability === "no-captions" && s.sttPhase === "preparing"
+              ? s.tr("transcript.stt.preparing")
+              : s.availability === "no-captions" &&
+                  s.sttPhase === "transcribing"
+                ? `${s.tr("transcript.stt.transcribing")} ${Math.round(s.sttProgress * 100)}%`
+                : s.availability === "no-captions" && s.sttPhase === "error"
+                  ? `${s.tr("transcript.stt.error")} ${s.sttError ?? ""}`
+                  : s.tr(key)}
         </p>
         {s.availability === "no-captions" &&
           (s.sttPhase === "preparing" || s.sttPhase === "transcribing") && (
-          <button className="btn" onClick={() => void s.cancelTranscription()}>{s.tr("transcript.stt.cancel")}</button>
-        )}
+            <button
+              className="btn"
+              onClick={() => void s.cancelTranscription()}
+            >
+              {s.tr("transcript.stt.cancel")}
+            </button>
+          )}
         {s.availability === "no-captions" &&
           (s.sttPhase === "error" || s.sttPhase === "cancelled") && (
-          <button className="btn primary" onClick={() => void s.startTranscription()}>{s.tr("transcript.stt.retry")}</button>
-        )}
+            <button
+              className="btn primary"
+              onClick={() => void s.startTranscription()}
+            >
+              {s.tr("transcript.stt.retry")}
+            </button>
+          )}
         {s.shellStatus !== "ready" &&
           s.shellStatus !== "no-video-tab" &&
           s.shellStatus !== "unsupported-page" && (
@@ -235,7 +255,13 @@ export function TranscriptView() {
           {transcript.video.channelName && (
             <div className="channel">{transcript.video.channelName}</div>
           )}
-          <div className="channel">{s.tr(transcript.source.method === "local-whisper" ? "transcript.stt.generated" : "transcript.stt.youtube")}</div>
+          <div className="channel">
+            {s.tr(
+              transcript.source.method === "local-whisper"
+                ? "transcript.stt.generated"
+                : "transcript.stt.youtube",
+            )}
+          </div>
         </div>
 
         <div className="toolbar transcript-search">
@@ -358,8 +384,12 @@ export function TranscriptView() {
       <div
         ref={parentRef}
         className="transcript-scroll"
-        onWheel={() => { manualScrollUntil.current = performance.now() + 2500; }}
-        onTouchStart={() => { manualScrollUntil.current = performance.now() + 2500; }}
+        onWheel={() => {
+          manualScrollUntil.current = performance.now() + 2500;
+        }}
+        onTouchStart={() => {
+          manualScrollUntil.current = performance.now() + 2500;
+        }}
         role="region"
         aria-label={s.tr("nav.transcript")}
       >

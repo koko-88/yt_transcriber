@@ -301,10 +301,30 @@ export function ActionsMenu({
               >
                 ← {tr("transcript.actions")}
               </button>
-              <div className="action-section-label">{tr("transcript.export")}</div>
-              <div className="action-view-choice" role="group" aria-label={tr("transcript.export.viewHint", { view: "" })}>
-                <button type="button" className="btn" aria-pressed={exportView === "paragraph"} onClick={() => setExportView("paragraph")}>{tr("transcript.view.paragraph")}</button>
-                <button type="button" className="btn" aria-pressed={exportView === "raw"} onClick={() => setExportView("raw")}>{tr("transcript.view.raw")}</button>
+              <div className="action-section-label">
+                {tr("transcript.export")}
+              </div>
+              <div
+                className="action-view-choice"
+                role="group"
+                aria-label={tr("transcript.export.viewHint", { view: "" })}
+              >
+                <button
+                  type="button"
+                  className="btn"
+                  aria-pressed={exportView === "paragraph"}
+                  onClick={() => setExportView("paragraph")}
+                >
+                  {tr("transcript.view.paragraph")}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  aria-pressed={exportView === "raw"}
+                  onClick={() => setExportView("raw")}
+                >
+                  {tr("transcript.view.raw")}
+                </button>
               </div>
               <label className="action-check">
                 <input

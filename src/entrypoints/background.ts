@@ -44,47 +44,97 @@ import { setSecret, deleteSecret, getSecret } from "../storage/secrets.js";
 import { videoIdFromUrl } from "../providers/youtube/session.js";
 import { panelContextForTab } from "../platform/tab-context.js";
 import type { AudioSource } from "../providers/youtube/audio-source.js";
-import { registerMediaObservation, getObservedMedia, noteMediaSession } from "../providers/youtube/media-observation.js";
+import {
+  registerMediaObservation,
+  getObservedMedia,
+  noteMediaSession,
+} from "../providers/youtube/media-observation.js";
+import { DEFAULT_STT_PROFILE } from "../stt/model-profile.js";
 
 let activeSttSession: { tabId: number; videoId: string } | null = null;
 
-function cancelStaleStt(tabId: number, videoId: string | null): void {
-  noteMediaSession(tabId, videoId);
-  if (activeSttSession?.tabId === tabId && activeSttSession.videoId === videoId) return;
+function cancelStaleStt(
+  tabId: number,
+  videoId: string | null,
+  forceNew = false,
+): void {
+  void noteMediaSession(tabId, videoId, forceNew).catch((error) =>
+    logger.warn("background", "media session update failed", {
+      error: String(error),
+    }),
+  );
+  if (
+    !forceNew &&
+    activeSttSession?.tabId === tabId &&
+    activeSttSession.videoId === videoId
+  )
+    return;
   if (activeSttSession?.tabId !== tabId) return;
   activeSttSession = null;
-  void browser.runtime.sendMessage({ target: "stt-offscreen", type: "cancel" }).catch(() => undefined);
+  void browser.runtime
+    .sendMessage({ target: "stt-offscreen", type: "cancel" })
+    .catch(() => undefined);
 }
 
 let offscreenCreation: Promise<void> | null = null;
 async function hasSttDocument(): Promise<boolean> {
-  const runtime = browser.runtime as unknown as { getContexts?: (options: {
-    contextTypes: string[]; documentUrls: string[];
-  }) => Promise<unknown[]> };
+  const runtime = browser.runtime as unknown as {
+    getContexts?: (options: {
+      contextTypes: string[];
+      documentUrls: string[];
+    }) => Promise<unknown[]>;
+  };
   if (!runtime.getContexts) return offscreenCreation !== null;
   const contexts = await runtime.getContexts({
     contextTypes: ["OFFSCREEN_DOCUMENT"],
-    documentUrls: [new URL("/stt-offscreen.html", browser.runtime.getURL("/sidepanel.html")).toString()],
+    documentUrls: [
+      new URL(
+        "/stt-offscreen.html",
+        browser.runtime.getURL("/sidepanel.html"),
+      ).toString(),
+    ],
   });
   return contexts.length > 0;
 }
 async function ensureSttDocument(): Promise<void> {
-  const offscreen = (browser as unknown as { offscreen?: {
-    createDocument(options: { url: string; reasons: string[]; justification: string }): Promise<void>;
-  } }).offscreen;
-  if (!offscreen) throw new Error("Local transcription requires Chromium offscreen documents");
+  const offscreen = (
+    browser as unknown as {
+      offscreen?: {
+        createDocument(options: {
+          url: string;
+          reasons: string[];
+          justification: string;
+        }): Promise<void>;
+      };
+    }
+  ).offscreen;
+  if (!offscreen)
+    throw new Error(
+      "Local transcription requires Chromium offscreen documents",
+    );
   if (!offscreenCreation) {
-    if (await hasSttDocument()) { offscreenCreation = Promise.resolve(); return; }
-    offscreenCreation = offscreen.createDocument({
-      url: "stt-offscreen.html",
-      reasons: ["WORKERS"],
-      justification: "Run cancellable local speech recognition independently of the side panel and service worker",
-    }).catch((error: unknown) => {
-      if (!/already exists|single offscreen/i.test(String(error))) throw error;
-    });
+    if (await hasSttDocument()) {
+      offscreenCreation = Promise.resolve();
+      return;
+    }
+    offscreenCreation = offscreen
+      .createDocument({
+        url: "stt-offscreen.html",
+        reasons: ["WORKERS"],
+        justification:
+          "Run cancellable local speech recognition independently of the side panel and service worker",
+      })
+      .catch((error: unknown) => {
+        if (!/already exists|single offscreen/i.test(String(error)))
+          throw error;
+      });
   }
-  try { await offscreenCreation; }
-  catch (error) { offscreenCreation = null; throw error; }
+  try {
+    await offscreenCreation;
+  } catch (error) {
+    offscreenCreation = null;
+    throw error;
+  }
 }
 
 /** The active browser tab is the only valid transcript target. */
@@ -137,12 +187,27 @@ async function forwardToContent<T>(
 export default defineBackground(() => {
   registerMediaObservation();
   browser.runtime.onMessage.addListener((raw, sender) => {
-    const message = raw as { target?: string; type?: string; tabId?: number; videoId?: string };
-    if (message.target !== "stt-guard" || message.type !== "current" ||
-        sender.id !== browser.runtime.id || !Number.isInteger(message.tabId) || !message.videoId) return undefined;
-    return browser.tabs.get(message.tabId!).then((tab) =>
-      tab.active && videoIdFromUrl(tab.url ?? "") === message.videoId,
-    ).catch(() => false);
+    const message = raw as {
+      target?: string;
+      type?: string;
+      tabId?: number;
+      videoId?: string;
+    };
+    if (
+      message.target !== "stt-guard" ||
+      message.type !== "current" ||
+      sender.id !== browser.runtime.id ||
+      !Number.isInteger(message.tabId) ||
+      !message.videoId
+    )
+      return undefined;
+    return browser.tabs
+      .get(message.tabId!)
+      .then(
+        (tab) =>
+          tab.active && videoIdFromUrl(tab.url ?? "") === message.videoId,
+      )
+      .catch(() => false);
   });
   void configurePanelAction().catch((error) =>
     logger.error("background", "native side-panel action setup failed", {
@@ -156,10 +221,11 @@ export default defineBackground(() => {
       .catch(() => undefined);
   };
   browser.tabs.onUpdated.addListener((tabId, change, tab) => {
-    if (!change.url) return;
-    cancelStaleStt(tabId, videoIdFromUrl(change.url));
+    if (!change.url && change.status !== "loading") return;
+    const videoId = videoIdFromUrl(change.url ?? tab.url ?? "");
+    cancelStaleStt(tabId, videoId, change.status === "loading");
     if (!tab.active) return;
-    notifyVideoChanged(videoIdFromUrl(change.url));
+    notifyVideoChanged(videoId);
   });
   browser.tabs.onActivated.addListener(({ tabId }) => {
     if (activeSttSession && activeSttSession.tabId !== tabId) {
@@ -218,26 +284,59 @@ export default defineBackground(() => {
     forwardToContent("playback.getTime", {}),
   );
 
-  bus.on("stt.start", z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }), ["extension-page"], async ({ videoId }) => {
-    const tabId = await resolveTargetTabId(videoId);
-    const observed = getObservedMedia(tabId, videoId);
-    const source = await forwardToContent<AudioSource | null>("stt.source", { videoId, observed }, videoId);
-    if (!source || source.videoId !== videoId) throw new Error("No usable full audio source is exposed for this video");
-    await ensureSttDocument();
-    activeSttSession = { tabId, videoId };
-    return browser.runtime.sendMessage({ target: "stt-offscreen", type: "start", source: { ...source, tabId } });
-  });
-  bus.on("stt.status", z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }), ["extension-page"], async ({ videoId }) => {
-    if (await hasSttDocument())
-      return browser.runtime.sendMessage({ target: "stt-offscreen", type: "status" });
-    const transcript = await getTranscript(`youtube:${videoId}:local-whisper`);
-    return transcript ? { videoId, phase: "ready", progress: 1, transcript } :
-      { videoId: null, phase: "idle", progress: 0 };
-  });
+  bus.on(
+    "stt.start",
+    z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }),
+    ["extension-page"],
+    async ({ videoId }) => {
+      const tabId = await resolveTargetTabId(videoId);
+      const observed = await getObservedMedia(tabId, videoId).catch(
+        () => undefined,
+      );
+      const source = await forwardToContent<AudioSource | null>(
+        "stt.source",
+        { videoId, observed },
+        videoId,
+      );
+      if (!source || source.videoId !== videoId)
+        throw new Error(
+          "No usable full audio source is exposed for this video",
+        );
+      await ensureSttDocument();
+      activeSttSession = { tabId, videoId };
+      return browser.runtime.sendMessage({
+        target: "stt-offscreen",
+        type: "start",
+        source: { ...source, tabId },
+      });
+    },
+  );
+  bus.on(
+    "stt.status",
+    z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }),
+    ["extension-page"],
+    async ({ videoId }) => {
+      if (await hasSttDocument())
+        return browser.runtime.sendMessage({
+          target: "stt-offscreen",
+          type: "status",
+        });
+      const transcript = await getTranscript(
+        `youtube:${videoId}:${DEFAULT_STT_PROFILE.trackId}`,
+      );
+      return transcript
+        ? { videoId, phase: "ready", progress: 1, transcript }
+        : { videoId: null, phase: "idle", progress: 0 };
+    },
+  );
   bus.on("stt.cancel", z.object({}), ["extension-page"], async () => {
     activeSttSession = null;
-    if (!(await hasSttDocument())) return { videoId: null, phase: "idle", progress: 0 };
-    return browser.runtime.sendMessage({ target: "stt-offscreen", type: "cancel" });
+    if (!(await hasSttDocument()))
+      return { videoId: null, phase: "idle", progress: 0 };
+    return browser.runtime.sendMessage({
+      target: "stt-offscreen",
+      type: "cancel",
+    });
   });
 
   // ---- relay: content script -> all panel pages ----

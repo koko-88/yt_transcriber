@@ -62,7 +62,9 @@ export default defineConfig({
     if (browser === "firefox") {
       return {
         ...base,
-        permissions: base.permissions.filter((p) => p !== "sidePanel" && p !== "offscreen"),
+        permissions: base.permissions.filter(
+          (p) => p !== "sidePanel" && p !== "offscreen",
+        ),
         // MV2 has no optional_host_permissions key; optional host patterns
         // must be listed under optional_permissions instead.
         optional_permissions: base.optional_host_permissions,

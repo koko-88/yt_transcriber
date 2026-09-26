@@ -28,10 +28,14 @@ const VIDEO_ID_RE = /^[\w-]{11}$/;
 
 // A regular watch HTML response for the same video is a same-session YouTube
 // surface. Shorts' reel API can omit caption metadata even when tracks exist.
-export async function watchPlayerResponse(videoId: string, signal?: AbortSignal): Promise<Record<string, unknown> | null> {
+export async function watchPlayerResponse(
+  videoId: string,
+  signal?: AbortSignal,
+): Promise<Record<string, unknown> | null> {
   if (!VIDEO_ID_RE.test(videoId)) return null;
   const response = await fetch(`/watch?v=${encodeURIComponent(videoId)}`, {
-    credentials: "include", ...(signal ? { signal } : {}),
+    credentials: "include",
+    ...(signal ? { signal } : {}),
   });
   if (!response.ok) return null;
   const html = await response.text();
@@ -51,8 +55,12 @@ export async function watchPlayerResponse(videoId: string, signal?: AbortSignal)
     } else if (c === '"') quoted = true;
     else if (c === "{") depth++;
     else if (c === "}" && --depth === 0) {
-      const parsed = JSON.parse(html.slice(start, i + 1)) as Record<string, unknown>;
-      const details = parsed["videoDetails"] as { videoId?: string } | undefined;
+      const parsed = JSON.parse(html.slice(start, i + 1)) as Record<
+        string,
+        unknown
+      >;
+      const details = parsed["videoDetails"] as
+        { videoId?: string } | undefined;
       return details?.videoId === videoId ? parsed : null;
     }
   }
@@ -157,8 +165,9 @@ export function startYouTubeSession(): void {
           if (active) port.postMessage({ videoId, ...state });
           if (state.playing) next = follow ? 100 : 500;
         }
-      } catch { /* player replaced during navigation */ }
-      finally {
+      } catch {
+        /* player replaced during navigation */
+      } finally {
         busy = false;
         if (active) timer = setTimeout(sample, next);
       }
@@ -199,8 +208,13 @@ export function startYouTubeSession(): void {
     if (!videoId || !(await ensureBridge())) return null;
     try {
       const snapshot = await bridge.getPlayerSnapshot();
-      if (snapshot.videoId === videoId && snapshot.tracks.length) return snapshot;
-      if (!location.pathname.startsWith("/shorts/") && snapshot.videoId === videoId) return snapshot;
+      if (snapshot.videoId === videoId && snapshot.tracks.length)
+        return snapshot;
+      if (
+        !location.pathname.startsWith("/shorts/") &&
+        snapshot.videoId === videoId
+      )
+        return snapshot;
       let response = watchCache.get(videoId);
       if (!response) {
         response = watchPlayerResponse(videoId).catch(() => null);
@@ -210,12 +224,17 @@ export function startYouTubeSession(): void {
       if (videoIdFromUrl(location.href) !== videoId) return null;
       if (!watch) {
         watchCache.delete(videoId);
-        return location.pathname.startsWith("/shorts/") ? null :
-          snapshot.videoId === videoId ? snapshot : null;
+        return location.pathname.startsWith("/shorts/")
+          ? null
+          : snapshot.videoId === videoId
+            ? snapshot
+            : null;
       }
       const fallback = snapshotFromPlayerResponse(watch, null);
-      return fallback.videoId === videoId && fallback.tracks.length >= snapshot.tracks.length
-        ? fallback : snapshot;
+      return fallback.videoId === videoId &&
+        fallback.tracks.length >= snapshot.tracks.length
+        ? fallback
+        : snapshot;
     } catch {
       return null;
     }
@@ -324,7 +343,11 @@ export function startYouTubeSession(): void {
       const promise = (async (): Promise<AcquisitionResult> => {
         try {
           return await acquireTranscript({
-            bridge: { ...bridge, getPlayerSnapshot: async () => (await currentSnapshot()) ?? bridge.getPlayerSnapshot() },
+            bridge: {
+              ...bridge,
+              getPlayerSnapshot: async () =>
+                (await currentSnapshot()) ?? bridge.getPlayerSnapshot(),
+            },
             fetchCaption,
             videoId,
             currentVideoId: () => videoIdFromUrl(location.href),
@@ -366,15 +389,33 @@ export function startYouTubeSession(): void {
     }
   });
 
-  bus.on("stt.source", z.object({
-    videoId: z.string().regex(VIDEO_ID_RE),
-    observed: z.object({ url: z.string().max(4096), mimeType: z.string().max(100) }).optional(),
-  }), ["extension-page"], async ({ videoId, observed }) => {
-    if (videoIdFromUrl(location.href) !== videoId) throw new AppError({ code: "ACQ_STALE_VIDEO", message: "active video changed" });
-    const source = await getAudioSource(videoId, observed as ObservedMedia | undefined);
-    if (videoIdFromUrl(location.href) !== videoId) throw new AppError({ code: "ACQ_STALE_VIDEO", message: "active video changed" });
-    return source;
-  });
+  bus.on(
+    "stt.source",
+    z.object({
+      videoId: z.string().regex(VIDEO_ID_RE),
+      observed: z
+        .object({ url: z.string().max(4096), mimeType: z.string().max(100) })
+        .optional(),
+    }),
+    ["extension-page"],
+    async ({ videoId, observed }) => {
+      if (videoIdFromUrl(location.href) !== videoId)
+        throw new AppError({
+          code: "ACQ_STALE_VIDEO",
+          message: "active video changed",
+        });
+      const source = await getAudioSource(
+        videoId,
+        observed as ObservedMedia | undefined,
+      );
+      if (videoIdFromUrl(location.href) !== videoId)
+        throw new AppError({
+          code: "ACQ_STALE_VIDEO",
+          message: "active video changed",
+        });
+      return source;
+    },
+  );
 
   // ---- SPA navigation detection ----
 

@@ -7,19 +7,19 @@ this list stays complete and OSI-approved.
 
 ## Runtime dependencies
 
-| Package                 | Version range | License | Copyright                           |
-| ----------------------- | ------------- | ------- | ----------------------------------- |
-| @huggingface/transformers | ^3.8.1      | Apache-2.0 | Hugging Face contributors         |
-| @tanstack/react-virtual | ^3.13.0       | MIT     | TanStack contributors               |
-| docx                    | ^9.x          | MIT     | Dolphin Tech / docx.js contributors |
-| idb                     | ^8.0.2        | ISC     | Jake Archibald                      |
-| mediabunny              | ^1.59.1       | MPL-2.0 | Vanilagy                           |
-| pdf-lib                 | ^1.x          | MIT     | Andrew Dillon                       |
-| pptxgenjs               | ^3.x          | MIT     | Brent Ely                           |
-| react                   | ^19.1.0       | MIT     | Meta Platforms, Inc. and affiliates |
-| react-dom               | ^19.1.0       | MIT     | Meta Platforms, Inc. and affiliates |
-| zod                     | ^3.25.0       | MIT     | Colin McDonnell                     |
-| zustand                 | ^5.0.0        | MIT     | Paul Henschel                       |
+| Package                   | Version range | License    | Copyright                           |
+| ------------------------- | ------------- | ---------- | ----------------------------------- |
+| @huggingface/transformers | ^3.8.1        | Apache-2.0 | Hugging Face contributors           |
+| @tanstack/react-virtual   | ^3.13.0       | MIT        | TanStack contributors               |
+| docx                      | ^9.x          | MIT        | Dolphin Tech / docx.js contributors |
+| idb                       | ^8.0.2        | ISC        | Jake Archibald                      |
+| mediabunny                | ^1.59.1       | MPL-2.0    | Vanilagy                            |
+| pdf-lib                   | ^1.x          | MIT        | Andrew Dillon                       |
+| pptxgenjs                 | ^3.x          | MIT        | Brent Ely                           |
+| react                     | ^19.1.0       | MIT        | Meta Platforms, Inc. and affiliates |
+| react-dom                 | ^19.1.0       | MIT        | Meta Platforms, Inc. and affiliates |
+| zod                       | ^3.25.0       | MIT        | Colin McDonnell                     |
+| zustand                   | ^5.0.0        | MIT        | Paul Henschel                       |
 
 ## Build-time-only dependencies (not shipped)
 
