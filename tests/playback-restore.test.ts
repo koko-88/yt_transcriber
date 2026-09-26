@@ -75,7 +75,10 @@ async function runtime(initial: {
       },
     }),
   });
-  vi.stubGlobal("location", { origin: "https://www.youtube.com" });
+  vi.stubGlobal("location", {
+    origin: "https://www.youtube.com",
+    pathname: "/watch",
+  });
   const { startMainBridge } =
     await import("../src/providers/youtube/main-bridge-runtime");
   startMainBridge();

@@ -9,7 +9,7 @@ this list stays complete and OSI-approved.
 
 | Package                   | Version range | License    | Copyright                           |
 | ------------------------- | ------------- | ---------- | ----------------------------------- |
-| @huggingface/transformers | ^3.8.1        | Apache-2.0 | Hugging Face contributors           |
+| @huggingface/transformers | ^4.3.0        | Apache-2.0 | Hugging Face contributors           |
 | @tanstack/react-virtual   | ^3.13.0       | MIT        | TanStack contributors               |
 | docx                      | ^9.x          | MIT        | Dolphin Tech / docx.js contributors |
 | idb                       | ^8.0.2        | ISC        | Jake Archibald                      |
@@ -25,7 +25,7 @@ this list stays complete and OSI-approved.
 
 eslint, typescript, typescript-eslint, prettier, vitest, @vitest/coverage-v8,
 wxt, @wxt-dev/module-react, web-ext, @playwright/test, @eslint/js,
-eslint-plugin-react-hooks are development tools. They are not bundled into the
+eslint-plugin-react-hooks, audit-ci are development tools. They are not bundled into the
 published extension.
 
 ## MIT License (applies to the MIT-licensed packages above)

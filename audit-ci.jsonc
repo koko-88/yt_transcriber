@@ -1,0 +1,24 @@
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "package-manager": "npm",
+  "low": true,
+  "skip-dev": true,
+  "pass-enoaudit": false,
+  "retry-count": 0,
+  "allowlist": [
+    {
+      "GHSA-5p2g-fcmc-qvqq|image-size": {
+        "active": true,
+        "expiry": "2026-10-26T00:00:00.000Z",
+        "notes": "JXL/HEIF parser denial of service. Exception only for pptxgenjs > image-size (node_modules/pptxgenjs/node_modules/image-size). PptxGenJS 3.12.0 declares image-size but its shipped runtime bundles do not import or call it; its browser mapping disables it. The affected parsers are unreachable through this project's PptxGenJS export path. Upstream removal PR https://github.com/gitbrent/PptxGenJS/pull/1473 confirms the unused dependency and byte-identical bundles. No patched 1.x release is published; 2.0.4 exists outside PptxGenJS\u0027s declared ^1.0.0 range. audit-ci 7.1.0 emits the truncated path image-size because npm omits its non-vulnerable parent. scripts/check-audit-exception-paths.mjs enforces this exact runtime installation path and these reviewed package versions before audit-ci runs. Review/remove this exception by 2026-10-26, or earlier when upstream releases the removal; audit-ci enforces expiry.",
+      },
+    },
+    {
+      "GHSA-w3rx-r6r6-pgpr|image-size": {
+        "active": true,
+        "expiry": "2026-10-26T00:00:00.000Z",
+        "notes": "ICNS parser denial of service. Exception only for pptxgenjs > image-size (node_modules/pptxgenjs/node_modules/image-size). PptxGenJS 3.12.0 declares image-size but its shipped runtime bundles do not import or call it; its browser mapping disables it. The affected parser is unreachable through this project's PptxGenJS export path. Upstream removal PR https://github.com/gitbrent/PptxGenJS/pull/1473 confirms the unused dependency and byte-identical bundles. No patched 1.x release is published; 2.0.4 exists outside PptxGenJS\u0027s declared ^1.0.0 range. audit-ci 7.1.0 emits the truncated path image-size because npm omits its non-vulnerable parent. scripts/check-audit-exception-paths.mjs enforces this exact runtime installation path and these reviewed package versions before audit-ci runs. Review/remove this exception by 2026-10-26, or earlier when upstream releases the removal; audit-ci enforces expiry.",
+      },
+    },
+  ],
+}

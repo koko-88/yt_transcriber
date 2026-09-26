@@ -66,7 +66,7 @@ jobs:
         run: npm run web-ext:lint
 
       - name: Dependency audit (runtime dependencies)
-        run: npm audit --omit=dev --audit-level=moderate
+        run: npm run audit:security
 
       - name: Extension smoke test (E2E)
         run: npm run test:e2e

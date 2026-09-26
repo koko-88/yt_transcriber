@@ -29,6 +29,7 @@
     "lint:fix": "eslint . --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "audit:security": "node scripts/check-audit-exception-paths.mjs && audit-ci --config audit-ci.jsonc",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
@@ -52,7 +53,7 @@
     "ui:verify": "npm run tokens:build && npm run compile && npm run build-storybook"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
+    "@huggingface/transformers": "^4.3.0",
     "@tanstack/react-virtual": "^3.13.0",
     "docx": "^9.7.2",
     "idb": "^8.0.2",
@@ -77,6 +78,7 @@
     "@vitest/browser-playwright": "^4.1.11",
     "@vitest/coverage-v8": "^4.1.11",
     "@wxt-dev/module-react": "^1.1.0",
+    "audit-ci": "^7.1.0",
     "eslint": "^9.29.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-storybook": "^10.6.0",
