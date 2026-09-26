@@ -1,9 +1,11 @@
 import { browser } from "wxt/browser";
 import type { AudioSource } from "../../providers/youtube/audio-source.js";
-import type { Transcript, TranscriptSegment } from "../../core/model.js";
+import type { Transcript } from "../../core/model.js";
 import { makeTranscriptId, TRANSCRIPT_SCHEMA_VERSION } from "../../core/model.js";
 import { hashText, segmentsToText } from "../../core/hash.js";
 import { saveTranscript } from "../../storage/transcripts.js";
+import { readPcmWindows } from "../../stt/media-reader.js";
+import { TranscriptNormalizer, type SttCue } from "../../stt/transcript-normalizer.js";
 
 type Phase = "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
 interface Status { videoId: string | null; phase: Phase; progress: number; error?: string; transcript?: Transcript }
@@ -56,61 +58,36 @@ function waitWorker(message: unknown, signal: AbortSignal): Promise<Record<strin
   });
 }
 
-function mono16k(buffer: AudioBuffer, from: number, to: number): Float32Array {
-  const ratio = buffer.sampleRate / 16000;
-  const result = new Float32Array(Math.ceil((to - from) / ratio));
-  const channels = Array.from({ length: buffer.numberOfChannels }, (_, i) => buffer.getChannelData(i));
-  for (let i = 0; i < result.length; i++) {
-    const source = Math.min(to - 1, from + i * ratio);
-    const a = Math.floor(source);
-    const b = Math.min(to - 1, a + 1);
-    const fraction = source - a;
-    let value = 0;
-    for (const channel of channels) value += channel[a]! * (1 - fraction) + channel[b]! * fraction;
-    result[i] = value / channels.length;
-  }
-  return result;
-}
-
 async function run(source: AudioSource, signal: AbortSignal, jobGeneration: number): Promise<void> {
   try {
     publish({ videoId: source.videoId, phase: "preparing", progress: 0 });
-    const mediaUrl = new URL(source.url);
-    if (mediaUrl.protocol !== "https:" || !/(^|\.)googlevideo\.com$/.test(mediaUrl.hostname))
-      throw new Error("Audio source is outside the allowed YouTube media host");
-    const response = await fetch(source.url, { signal, credentials: "omit" });
-    if (!response.ok) throw new Error(`Audio download failed (${response.status})`);
-    const bytes = await response.arrayBuffer();
-    if (signal.aborted) return;
-    publish({ videoId: source.videoId, phase: "preparing", progress: 0.05 });
-    const context = new AudioContext();
-    let audio: AudioBuffer;
-    try { audio = await context.decodeAudioData(bytes); }
-    finally { await context.close(); }
-    if (signal.aborted) return;
     worker = new Worker(new URL("../../stt/worker.ts", import.meta.url), { type: "module" });
     const init = await waitWorker({ type: "init", wasmUrl: new URL("ort/", location.origin).toString() }, signal);
     if (init.type !== "ready") throw new Error("STT model did not initialize");
-    const segments: TranscriptSegment[] = [];
-    const chunkSamples = Math.floor(audio.sampleRate * 25);
-    for (let start = 0; start < audio.length; start += chunkSamples) {
-      if (signal.aborted) return;
-      const end = Math.min(audio.length, start + chunkSamples);
-      const offsetSeconds = start / audio.sampleRate;
-      const result = await waitWorker({ type: "chunk", audio: mono16k(audio, start, end), offsetSeconds }, signal);
-      const output = result.result as { text?: string; chunks?: { text: string; timestamp: [number, number | null] }[] };
-      const cues = output.chunks?.length ? output.chunks : [{ text: output.text ?? "", timestamp: [0, (end - start) / audio.sampleRate] as [number, number] }];
-      for (const cue of cues) {
-        const text = cue.text.trim();
-        if (!text) continue;
-        const startMs = Math.round((offsetSeconds + cue.timestamp[0]) * 1000);
-        const endMs = Math.max(startMs + 1, Math.round((offsetSeconds + (cue.timestamp[1] ?? (end - start) / audio.sampleRate)) * 1000));
-        segments.push({ index: segments.length, startMs, endMs, text });
-      }
-      publish({ videoId: source.videoId, phase: "transcribing", progress: 0.1 + 0.9 * end / audio.length });
+    const normalizer = new TranscriptNormalizer();
+    let decodedEndSeconds = 0;
+    let mediaDurationSeconds: number | null = null;
+    for await (const window of readPcmWindows(source, signal)) {
+      if (signal.aborted || generation !== jobGeneration) return;
+      const result = await waitWorker({ type: "chunk", audio: window.audio }, signal);
+      const output = result.result as { text?: string; chunks?: SttCue[] };
+      const cues = output.chunks?.length ? output.chunks : [{
+        text: output.text ?? "", timestamp: [0, window.endSeconds - window.startSeconds],
+      } satisfies SttCue];
+      normalizer.addWindow(window, cues);
+      decodedEndSeconds = window.endSeconds;
+      mediaDurationSeconds = window.durationSeconds;
+      const total = mediaDurationSeconds ??
+        (source.metadata.durationMs ? source.metadata.durationMs / 1000 : null);
+      publish({ videoId: source.videoId, phase: "transcribing",
+        progress: total ? Math.min(0.99, 0.1 + 0.9 * decodedEndSeconds / total) : 0.1 });
     }
-    if (signal.aborted) return;
+    if (signal.aborted || generation !== jobGeneration) return;
+    const segments = normalizer.finish();
     if (!segments.length) throw new Error("Speech model returned no transcript");
+    if (source.tabId == null || !await browser.runtime.sendMessage({
+      target: "stt-guard", type: "current", tabId: source.tabId, videoId: source.videoId,
+    })) return;
     const transcript: Transcript = {
       id: makeTranscriptId(source.videoId, "local-whisper"),
       schemaVersion: TRANSCRIPT_SCHEMA_VERSION,
@@ -119,13 +96,14 @@ async function run(source: AudioSource, signal: AbortSignal, jobGeneration: numb
       segments,
       source: { method: "local-whisper", format: "stt", completeness: {
         status: "complete", firstCueMs: segments[0]!.startMs, lastCueEndMs: segments.at(-1)!.endMs,
-        videoDurationMs: Math.round(audio.duration * 1000),
+        videoDurationMs: Math.round(decodedEndSeconds * 1000),
       } },
       acquiredAt: Date.now(),
       textHash: hashText(segmentsToText(segments)),
     };
     await saveTranscript(transcript);
-    publish({ videoId: source.videoId, phase: "ready", progress: 1, transcript });
+    if (!signal.aborted && generation === jobGeneration)
+      publish({ videoId: source.videoId, phase: "ready", progress: 1, transcript });
   } catch (error) {
     if (!signal.aborted) publish({ videoId: source.videoId, phase: "error", progress: status.progress, error: error instanceof Error ? error.message : String(error) });
   } finally {

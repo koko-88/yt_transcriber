@@ -9,9 +9,11 @@ this list stays complete and OSI-approved.
 
 | Package                 | Version range | License | Copyright                           |
 | ----------------------- | ------------- | ------- | ----------------------------------- |
+| @huggingface/transformers | ^3.8.1      | Apache-2.0 | Hugging Face contributors         |
 | @tanstack/react-virtual | ^3.13.0       | MIT     | TanStack contributors               |
 | docx                    | ^9.x          | MIT     | Dolphin Tech / docx.js contributors |
 | idb                     | ^8.0.2        | ISC     | Jake Archibald                      |
+| mediabunny              | ^1.59.1       | MPL-2.0 | Vanilagy                           |
 | pdf-lib                 | ^1.x          | MIT     | Andrew Dillon                       |
 | pptxgenjs               | ^3.x          | MIT     | Brent Ely                           |
 | react                   | ^19.1.0       | MIT     | Meta Platforms, Inc. and affiliates |
@@ -58,6 +60,12 @@ INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM LOSS
 OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR OTHER
 TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
+
+## Mozilla Public License 2.0 (mediabunny)
+
+Mediabunny is distributed under MPL-2.0. Its complete license text is included
+in `public/licenses/mediabunny-MPL-2.0.txt` and in the extension build at
+`licenses/mediabunny-MPL-2.0.txt`. Source: https://github.com/Vanilagy/mediabunny.
 
 ## Trademarks
 

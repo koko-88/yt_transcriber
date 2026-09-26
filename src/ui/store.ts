@@ -390,8 +390,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         }
       } else {
         set({ availability: result.reason, transcript: null });
-        if (result.reason === "no-captions" || result.reason === "fetch-empty" ||
-            result.reason === "parse-failed") void get().startTranscription();
+        if (result.reason === "no-captions") void get().startTranscription();
       }
     } catch (e) {
       if (epoch !== acquireEpoch || get().videoId !== expectedVideoId) return;
@@ -418,7 +417,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   async startTranscription() {
     const videoId = get().videoId;
     if (!videoId) return;
-    set({ availability: "no-captions", sttPhase: "preparing", sttProgress: 0, sttError: null });
+    set({ sttPhase: "preparing", sttProgress: 0, sttError: null });
     try {
       const existing = await bus.request<{ videoId: string | null; phase: PanelState["sttPhase"]; progress: number; transcript?: unknown }>("stt.status", { videoId });
       if (get().videoId !== videoId) return;

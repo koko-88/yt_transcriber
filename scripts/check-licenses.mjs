@@ -19,6 +19,7 @@ const ALLOWED = new Set([
   "0BSD",
   "CC0-1.0",
   "Python-2.0",
+  "MPL-2.0",
 ]);
 
 let failures = 0;

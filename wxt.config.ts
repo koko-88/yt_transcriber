@@ -87,6 +87,7 @@ export default defineConfig({
 
     return {
       ...base,
+      permissions: [...base.permissions, "webRequest"],
       minimum_chrome_version: "128",
     };
   },

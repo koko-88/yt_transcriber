@@ -44,6 +44,17 @@ import { setSecret, deleteSecret, getSecret } from "../storage/secrets.js";
 import { videoIdFromUrl } from "../providers/youtube/session.js";
 import { panelContextForTab } from "../platform/tab-context.js";
 import type { AudioSource } from "../providers/youtube/audio-source.js";
+import { registerMediaObservation, getObservedMedia, noteMediaSession } from "../providers/youtube/media-observation.js";
+
+let activeSttSession: { tabId: number; videoId: string } | null = null;
+
+function cancelStaleStt(tabId: number, videoId: string | null): void {
+  noteMediaSession(tabId, videoId);
+  if (activeSttSession?.tabId === tabId && activeSttSession.videoId === videoId) return;
+  if (activeSttSession?.tabId !== tabId) return;
+  activeSttSession = null;
+  void browser.runtime.sendMessage({ target: "stt-offscreen", type: "cancel" }).catch(() => undefined);
+}
 
 let offscreenCreation: Promise<void> | null = null;
 async function hasSttDocument(): Promise<boolean> {
@@ -124,6 +135,15 @@ async function forwardToContent<T>(
 }
 
 export default defineBackground(() => {
+  registerMediaObservation();
+  browser.runtime.onMessage.addListener((raw, sender) => {
+    const message = raw as { target?: string; type?: string; tabId?: number; videoId?: string };
+    if (message.target !== "stt-guard" || message.type !== "current" ||
+        sender.id !== browser.runtime.id || !Number.isInteger(message.tabId) || !message.videoId) return undefined;
+    return browser.tabs.get(message.tabId!).then((tab) =>
+      tab.active && videoIdFromUrl(tab.url ?? "") === message.videoId,
+    ).catch(() => false);
+  });
   void configurePanelAction().catch((error) =>
     logger.error("background", "native side-panel action setup failed", {
       error: String(error),
@@ -135,11 +155,17 @@ export default defineBackground(() => {
       .sendMessage({ type: "panel.videoChanged", payload: { videoId } })
       .catch(() => undefined);
   };
-  browser.tabs.onUpdated.addListener((_tabId, change, tab) => {
-    if (!change.url || !tab.active) return;
+  browser.tabs.onUpdated.addListener((tabId, change, tab) => {
+    if (!change.url) return;
+    cancelStaleStt(tabId, videoIdFromUrl(change.url));
+    if (!tab.active) return;
     notifyVideoChanged(videoIdFromUrl(change.url));
   });
   browser.tabs.onActivated.addListener(({ tabId }) => {
+    if (activeSttSession && activeSttSession.tabId !== tabId) {
+      const stale = activeSttSession;
+      cancelStaleStt(stale.tabId, null);
+    }
     void browser.tabs
       .get(tabId)
       .then((tab) => notifyVideoChanged(videoIdFromUrl(tab.url ?? "")))
@@ -193,10 +219,13 @@ export default defineBackground(() => {
   );
 
   bus.on("stt.start", z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }), ["extension-page"], async ({ videoId }) => {
-    const source = await forwardToContent<AudioSource | null>("stt.source", { videoId }, videoId);
+    const tabId = await resolveTargetTabId(videoId);
+    const observed = getObservedMedia(tabId, videoId);
+    const source = await forwardToContent<AudioSource | null>("stt.source", { videoId, observed }, videoId);
     if (!source || source.videoId !== videoId) throw new Error("No usable full audio source is exposed for this video");
     await ensureSttDocument();
-    return browser.runtime.sendMessage({ target: "stt-offscreen", type: "start", source });
+    activeSttSession = { tabId, videoId };
+    return browser.runtime.sendMessage({ target: "stt-offscreen", type: "start", source: { ...source, tabId } });
   });
   bus.on("stt.status", z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }), ["extension-page"], async ({ videoId }) => {
     if (await hasSttDocument())
@@ -206,6 +235,7 @@ export default defineBackground(() => {
       { videoId: null, phase: "idle", progress: 0 };
   });
   bus.on("stt.cancel", z.object({}), ["extension-page"], async () => {
+    activeSttSession = null;
     if (!(await hasSttDocument())) return { videoId: null, phase: "idle", progress: 0 };
     return browser.runtime.sendMessage({ target: "stt-offscreen", type: "cancel" });
   });
@@ -218,6 +248,7 @@ export default defineBackground(() => {
     ["content-script"],
     async (p, sender) => {
       const tab = await activeTab();
+      if (sender.tab?.id != null) cancelStaleStt(sender.tab.id, p.videoId);
       if (sender.tab?.id === tab?.id) notifyVideoChanged(p.videoId);
       return { ok: true };
     },

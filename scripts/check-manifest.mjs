@@ -31,6 +31,7 @@ const ALLOWED_PERMISSIONS = new Set([
   "unlimitedStorage",
   "sidePanel",
   "offscreen",
+  "webRequest",
 ]);
 const ALLOWED_HOSTS = [
   "https://www.youtube.com/*",

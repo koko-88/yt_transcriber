@@ -15,7 +15,7 @@ import { buildTrackEntries } from "./track-select.js";
 import { mapSnapshotToAvailability } from "./availability.js";
 import type { PlayerSnapshot } from "./bridge-protocol.js";
 import { snapshotFromPlayerResponse } from "./main-bridge.js";
-import { getAudioSource } from "./audio-source.js";
+import { getAudioSource, type ObservedMedia } from "./audio-source.js";
 
 export interface VideoPageState {
   videoId: string | null;
@@ -366,9 +366,14 @@ export function startYouTubeSession(): void {
     }
   });
 
-  bus.on("stt.source", z.object({ videoId: z.string().regex(VIDEO_ID_RE) }), ["extension-page"], async ({ videoId }) => {
+  bus.on("stt.source", z.object({
+    videoId: z.string().regex(VIDEO_ID_RE),
+    observed: z.object({ url: z.string().max(4096), mimeType: z.string().max(100) }).optional(),
+  }), ["extension-page"], async ({ videoId, observed }) => {
     if (videoIdFromUrl(location.href) !== videoId) throw new AppError({ code: "ACQ_STALE_VIDEO", message: "active video changed" });
-    return getAudioSource(videoId);
+    const source = await getAudioSource(videoId, observed as ObservedMedia | undefined);
+    if (videoIdFromUrl(location.href) !== videoId) throw new AppError({ code: "ACQ_STALE_VIDEO", message: "active video changed" });
+    return source;
   });
 
   // ---- SPA navigation detection ----
