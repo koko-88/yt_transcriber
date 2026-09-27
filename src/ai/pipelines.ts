@@ -6,7 +6,7 @@ import { formatTimestamp } from "../core/export.js";
 import { bm25Retrieve } from "../core/search.js";
 import type { AiPipeline, ChatMessage } from "./types.js";
 
-export const PROMPT_VERSION = 2;
+export const PROMPT_VERSION = 3;
 
 /** Rough char budget for context (approx 4 chars/token, 16k tokens). */
 const MAX_CONTEXT_CHARS = 60_000;
@@ -28,7 +28,10 @@ export function formatAnchoredSegments(
 }
 
 function transcriptText(transcript: Transcript, maxChars: number): string {
-  return truncate(formatAnchoredSegments(transcript.segments), maxChars);
+  const text = formatAnchoredSegments(transcript.segments);
+  if (text.length > maxChars)
+    throw new Error("Transcript must be processed in sections");
+  return text;
 }
 
 const SYSTEM = `You are a precise assistant embedded in a browser extension that analyses YouTube video transcripts.
@@ -42,10 +45,8 @@ export function buildMessages(
   transcript: Transcript,
   question?: string,
 ): ChatMessage[] {
-  const text = transcriptText(
-    transcript,
-    pipeline === "qa" ? 0 : MAX_CONTEXT_CHARS,
-  );
+  const text =
+    pipeline === "qa" ? "" : transcriptText(transcript, MAX_CONTEXT_CHARS);
   const title = transcript.video.title;
   const header = `Video: "${title}"\n\nTranscript (each line starts with its [timestamp]):\n`;
 
@@ -159,7 +160,7 @@ export function groundAiOutput(
   raw: string,
   transcript: Transcript,
 ): string {
-  if (pipeline === "summary") return raw;
+  void pipeline;
   const { text, invalid } = validateCitations(raw, transcript.segments);
   if (invalid.length === 0) return text;
   return `${text}\n\n—\nSome model timestamps were removed because they did not match the transcript.`;

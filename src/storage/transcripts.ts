@@ -3,11 +3,22 @@ import type { Transcript } from "@/core/model";
 import { AppError } from "@/core/errors";
 import { logger } from "@/core/logger";
 
+export function persistableTranscript(transcript: Transcript): Transcript {
+  const track = { ...transcript.track };
+  delete track.sourceRef;
+  return { ...transcript, track };
+}
+
 export async function saveTranscript(transcript: Transcript): Promise<void> {
   try {
     const db = await getDb();
-    const tx = db.transaction(["transcripts", "videos"], "readwrite");
-    await tx.objectStore("transcripts").put(transcript);
+    const tx = db.transaction(["transcripts", "videos", "edits"], "readwrite");
+    const edit = await tx.objectStore("edits").get(transcript.id);
+    const track = { ...transcript.track };
+    delete track.sourceRef;
+    await tx
+      .objectStore("transcripts")
+      .put(edit?.corrected ?? { ...transcript, track });
     await tx.objectStore("videos").put(transcript.video);
     await tx.done;
   } catch (err: unknown) {

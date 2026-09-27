@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { browser } from "wxt/browser";
+import { AiHistory } from "../components/AiHistory.js";
 import { usePanelStore } from "../store.js";
 import { bus } from "../../platform/messaging.js";
 import { ensureWebsiteContentConsent } from "../../platform/permissions.js";
@@ -64,9 +65,9 @@ export function AiView() {
   const [sessionOnly, setSessionOnly] = useState(false);
   const [hasKey, setHasKey] = useState(false);
   const [question, setQuestion] = useState("");
-  const [result, setResult] = useState<{ text: string; meta: string } | null>(
-    null,
-  );
+  const [historyRevision, setHistoryRevision] = useState(0);
+  const [coverage, setCoverage] = useState({ processed: 0, total: 0 });
+  const runGeneration = useRef(0);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<Status>(null);
   const [needsConsent, setNeedsConsent] = useState(false);
@@ -82,16 +83,33 @@ export function AiView() {
   }, []);
 
   useEffect(() => {
-    setResult(null);
+    runGeneration.current++;
+    abortRef.current?.abort();
+    setBusy(false);
     setNeedsConsent(false);
     setStatus(null);
     if (provider) {
-      setModel(provider.defaultModel);
+      setModel(
+        provider.id === s.settings.aiProvider
+          ? s.settings.aiModel || provider.defaultModel
+          : provider.defaultModel,
+      );
       void bus
         .request<{ has: boolean }>("ai.secret.has", { providerId: provider.id })
-        .then((r) => setHasKey(r.has));
+        .then((r) => setHasKey(r.has))
+        .catch(() => setHasKey(false));
     }
   }, [providerId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    runGeneration.current++;
+    abortRef.current?.abort();
+    setBusy(false);
+    setStatus(null);
+    setNeedsConsent(false);
+    pendingPipeline.current = null;
+    setCoverage({ processed: 0, total: 0 });
+  }, [s.transcript?.id]);
 
   const ensurePermission = async (): Promise<boolean> => {
     if (!provider?.originPattern) return false;
@@ -146,6 +164,8 @@ export function AiView() {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    const generation = ++runGeneration.current;
+    setCoverage({ processed: 0, total: 0 });
     setBusy(true);
     setStatus(null);
     setNeedsConsent(false);
@@ -161,12 +181,13 @@ export function AiView() {
         model,
         ...(pipeline === "qa" ? { question } : {}),
       };
-      const r = await runAi(request, consent, controller.signal);
+      const r = await runAi(request, consent, controller.signal, (progress) => {
+        if (generation === runGeneration.current) setCoverage(progress);
+      });
+      if (generation !== runGeneration.current) return;
       if (r.ok) {
-        setResult({
-          text: r.text ?? "",
-          meta: `${s.tr("ai.provider")}: ${r.provider} · ${s.tr("ai.model")}: ${r.model}`,
-        });
+        setHistoryRevision((value) => value + 1);
+        void s.loadLibrary();
       } else if (r.errorCode === "AI_CONSENT_REQUIRED") {
         setNeedsConsent(true);
         pendingPipeline.current = pipeline;
@@ -177,7 +198,7 @@ export function AiView() {
         });
       }
     } finally {
-      setBusy(false);
+      if (generation === runGeneration.current) setBusy(false);
     }
   };
 
@@ -304,6 +325,7 @@ export function AiView() {
         <div className="hint">{s.tr("ai.setup.description")}</div>
       </div>
 
+      <p className="hint">{s.tr("workspace.aiScope")}</p>
       {needsConsent && (
         <div className="banner" data-tone="error">
           <div>{s.tr("ai.consent", { provider: provider?.label ?? "" })}</div>
@@ -371,6 +393,7 @@ export function AiView() {
         <div className="banner" role="status" aria-live="polite">
           <span className="spinner" />
           {s.tr("ai.generating")}
+          {coverage.total > 0 && <p>{s.tr("workspace.coverage", coverage)}</p>}
         </div>
       )}
 
@@ -384,21 +407,7 @@ export function AiView() {
         </div>
       )}
 
-      {result && (
-        <div className="banner" style={{ whiteSpace: "pre-wrap" }}>
-          <div className="hint" style={{ marginBlockEnd: 6 }}>
-            {result.meta}
-            {" · "}
-            <button
-              className="btn"
-              onClick={() => void navigator.clipboard.writeText(result.text)}
-            >
-              {s.tr("transcript.copy.text")}
-            </button>
-          </div>
-          {result.text}
-        </div>
-      )}
+      <AiHistory revision={historyRevision} />
     </div>
   );
 }

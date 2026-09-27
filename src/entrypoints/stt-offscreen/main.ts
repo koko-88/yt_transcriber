@@ -1,5 +1,13 @@
 import { browser } from "wxt/browser";
 import type { AudioSource } from "../../providers/youtube/audio-source.js";
+import {
+  readCheckpoint,
+  saveCheckpoint,
+  deleteCheckpoint,
+  checkpointProfileKey,
+  checkpointStatus,
+} from "../../storage/stt-checkpoints.js";
+import type { TranscriptSegment } from "../../core/model.js";
 import type { Transcript } from "../../core/model.js";
 import {
   makeTranscriptId,
@@ -25,6 +33,8 @@ interface Status {
   progress: number;
   error?: string;
   transcript?: Transcript;
+  partialSegments?: TranscriptSegment[];
+  checkpointAvailable?: boolean;
 }
 let status: Status = { videoId: null, phase: "idle", progress: 0 };
 let controller: AbortController | null = null;
@@ -46,6 +56,7 @@ function cancel(): void {
   worker = null;
   if (status.phase === "preparing" || status.phase === "transcribing")
     publish({
+      ...status,
       videoId: status.videoId,
       phase: "cancelled",
       progress: status.progress,
@@ -69,6 +80,7 @@ function waitWorker(
         const p = Number(event.data.progress);
         if (Number.isFinite(p))
           publish({
+            ...status,
             videoId: status.videoId,
             phase: status.phase,
             progress: Math.min(0.1, p / 1000),
@@ -107,7 +119,19 @@ async function run(
   profile: SttModelProfile,
 ): Promise<void> {
   try {
-    publish({ videoId: source.videoId, phase: "preparing", progress: 0 });
+    const checkpoint = await readCheckpoint(
+      source.videoId,
+      profile,
+      source.metadata.durationMs,
+    );
+    if (signal.aborted || generation !== jobGeneration) return;
+    publish({
+      videoId: source.videoId,
+      phase: "preparing",
+      progress: 0,
+      partialSegments: checkpoint?.preview ?? [],
+      checkpointAvailable: !!checkpoint,
+    });
     worker = new Worker(new URL("../../stt/worker.ts", import.meta.url), {
       type: "module",
     });
@@ -120,11 +144,25 @@ async function run(
       signal,
     );
     if (init.type !== "ready") throw new Error("STT model did not initialize");
-    const normalizer = new TranscriptNormalizer();
-    let decodedEndSeconds = 0;
+    const normalizer = new TranscriptNormalizer(checkpoint?.state);
+    let decodedEndSeconds = checkpoint?.endSeconds ?? 0;
     let mediaDurationSeconds: number | null = null;
     for await (const window of readPcmWindows(source, signal)) {
       if (signal.aborted || generation !== jobGeneration) return;
+      // Decode with the existing range pipeline; skip already recognized windows.
+      if (checkpoint && window.endSeconds <= checkpoint.endSeconds) continue;
+      if (
+        source.tabId == null ||
+        !(await browser.runtime.sendMessage({
+          target: "stt-guard",
+          type: "current",
+          tabId: source.tabId,
+          videoId: source.videoId,
+        }))
+      ) {
+        cancel();
+        return;
+      }
       const result = await waitWorker(
         { type: "chunk", audio: window.audio },
         signal,
@@ -138,7 +176,23 @@ async function run(
               timestamp: [0, window.endSeconds - window.startSeconds],
             } satisfies SttCue,
           ];
+      if (signal.aborted || generation !== jobGeneration) return;
       normalizer.addWindow(window, cues);
+      const preview = normalizer.preview();
+      await saveCheckpoint({
+        videoId: source.videoId,
+        profileKey: checkpointProfileKey(profile),
+        durationMs:
+          source.metadata.durationMs ??
+          (window.durationSeconds == null
+            ? null
+            : window.durationSeconds * 1000),
+        endSeconds: window.endSeconds,
+        state: normalizer.snapshot(),
+        preview,
+        updatedAt: Date.now(),
+      });
+      if (signal.aborted || generation !== jobGeneration) return;
       decodedEndSeconds = window.endSeconds;
       mediaDurationSeconds = window.durationSeconds;
       const total =
@@ -147,6 +201,8 @@ async function run(
       publish({
         videoId: source.videoId,
         phase: "transcribing",
+        partialSegments: preview,
+        checkpointAvailable: true,
         progress: total
           ? Math.min(0.99, 0.1 + (0.9 * decodedEndSeconds) / total)
           : 0.1,
@@ -192,6 +248,7 @@ async function run(
       textHash: hashText(segmentsToText(segments)),
     };
     await saveTranscript(transcript);
+    await deleteCheckpoint(source.videoId);
     if (!signal.aborted && generation === jobGeneration)
       publish({
         videoId: source.videoId,
@@ -202,6 +259,7 @@ async function run(
   } catch (error) {
     if (!signal.aborted)
       publish({
+        ...status,
         videoId: source.videoId,
         phase: "error",
         progress: status.progress,
@@ -221,16 +279,25 @@ browser.runtime.onMessage.addListener((raw, sender) => {
     target?: string;
     type?: string;
     source?: AudioSource;
+    videoId?: string;
+    restart?: boolean;
   };
   if (message.target !== "stt-offscreen" || sender.id !== browser.runtime.id)
     return undefined;
-  if (message.type === "status") return Promise.resolve(status);
+  if (message.type === "status") {
+    if (status.videoId === message.videoId && status.phase !== "idle")
+      return Promise.resolve(status);
+    return message.videoId
+      ? checkpointStatus(message.videoId, DEFAULT_STT_PROFILE)
+      : Promise.resolve(status);
+  }
   if (message.type === "cancel") {
     cancel();
     return Promise.resolve(status);
   }
   if (message.type === "start" && message.source) {
     if (
+      !message.restart &&
       status.videoId === message.source.videoId &&
       (status.phase === "preparing" ||
         status.phase === "transcribing" ||
@@ -239,12 +306,23 @@ browser.runtime.onMessage.addListener((raw, sender) => {
       return Promise.resolve(status);
     cancel();
     controller = new AbortController();
-    void run(
-      message.source,
-      controller.signal,
-      generation,
-      DEFAULT_STT_PROFILE,
-    );
+    const source = message.source;
+    publish({ videoId: source.videoId, phase: "preparing", progress: 0 });
+    const signal = controller.signal;
+    const jobGeneration = generation;
+    void (async () => {
+      if (message.restart) await deleteCheckpoint(source.videoId);
+      if (signal.aborted || jobGeneration !== generation) return;
+      await run(source, signal, jobGeneration, DEFAULT_STT_PROFILE);
+    })().catch((error) => {
+      if (jobGeneration === generation)
+        publish({
+          videoId: source.videoId,
+          phase: "error",
+          progress: 0,
+          error: String(error),
+        });
+    });
     return Promise.resolve({
       videoId: message.source.videoId,
       phase: "preparing",

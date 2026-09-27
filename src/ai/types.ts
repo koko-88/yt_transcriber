@@ -28,4 +28,6 @@ export interface AiRunResult {
   /** Provider/model echo for display. */
   provider?: string;
   model?: string;
+  coverage?: { processed: number; total: number };
+  historyId?: string;
 }

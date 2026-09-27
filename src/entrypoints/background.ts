@@ -49,6 +49,9 @@ import {
   getObservedMedia,
   noteMediaSession,
 } from "../providers/youtube/media-observation.js";
+import { checkpointStatus } from "../storage/stt-checkpoints.js";
+import { getVersions, editSegment, undoEdit } from "../storage/edits.js";
+import { makeYouTubeTimestampUrl } from "../core/export.js";
 import { DEFAULT_STT_PROFILE } from "../stt/model-profile.js";
 
 let activeSttSession: { tabId: number; videoId: string } | null = null;
@@ -275,9 +278,32 @@ export default defineBackground(() => {
 
   bus.on(
     "acq.seek",
-    z.object({ timeMs: z.number().int().nonnegative() }),
+    z.object({
+      timeMs: z.number().int().nonnegative(),
+      videoId: z.string().regex(/^[\w-]{11}$/),
+    }),
     ["extension-page"],
-    (p) => forwardToContent("acq.seek", p),
+    (p) => forwardToContent("acq.seek", p, p.videoId),
+  );
+
+  bus.on(
+    "video.open",
+    z.object({
+      videoId: z.string().regex(/^[\w-]{11}$/),
+      timeMs: z.number().int().nonnegative(),
+    }),
+    ["extension-page"],
+    async (p) => {
+      const tab = await activeTab();
+      if (videoIdFromUrl(tab?.url ?? "") === p.videoId) {
+        return forwardToContent("acq.seek", p, p.videoId);
+      }
+      await browser.tabs.create({
+        url: makeYouTubeTimestampUrl(p.videoId, p.timeMs),
+        active: true,
+      });
+      return { ok: true };
+    },
   );
 
   bus.on("playback.getTime", z.object({}), ["extension-page"], () =>
@@ -286,9 +312,12 @@ export default defineBackground(() => {
 
   bus.on(
     "stt.start",
-    z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }),
+    z.object({
+      videoId: z.string().regex(/^[\w-]{11}$/),
+      restart: z.boolean().optional(),
+    }),
     ["extension-page"],
-    async ({ videoId }) => {
+    async ({ videoId, restart }) => {
       const tabId = await resolveTargetTabId(videoId);
       const observed = await getObservedMedia(tabId, videoId).catch(
         () => undefined,
@@ -303,11 +332,14 @@ export default defineBackground(() => {
           "No usable full audio source is exposed for this video",
         );
       await ensureSttDocument();
+      if ((await resolveTargetTabId(videoId)) !== tabId)
+        throw new Error("Active source changed");
       activeSttSession = { tabId, videoId };
       return browser.runtime.sendMessage({
         target: "stt-offscreen",
         type: "start",
         source: { ...source, tabId },
+        restart,
       });
     },
   );
@@ -316,17 +348,21 @@ export default defineBackground(() => {
     z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }),
     ["extension-page"],
     async ({ videoId }) => {
-      if (await hasSttDocument())
-        return browser.runtime.sendMessage({
+      if (await hasSttDocument()) {
+        const current = await browser.runtime.sendMessage({
           target: "stt-offscreen",
           type: "status",
+          videoId,
         });
+        if (current?.videoId === videoId && current.phase !== "idle")
+          return current;
+      }
       const transcript = await getTranscript(
         `youtube:${videoId}:${DEFAULT_STT_PROFILE.trackId}`,
       );
       return transcript
         ? { videoId, phase: "ready", progress: 1, transcript }
-        : { videoId: null, phase: "idle", progress: 0 };
+        : checkpointStatus(videoId, DEFAULT_STT_PROFILE);
     },
   );
   bus.on("stt.cancel", z.object({}), ["extension-page"], async () => {
@@ -359,6 +395,29 @@ export default defineBackground(() => {
 });
 
 export function registerStorageHandlers(): void {
+  bus.on(
+    "transcript.versions",
+    z.object({ transcript: TranscriptSchema }),
+    ["extension-page"],
+    (p) => getVersions(p.transcript),
+  );
+  bus.on(
+    "transcript.edit",
+    z.object({
+      transcript: TranscriptSchema,
+      index: z.number().int().nonnegative(),
+      text: z.string().trim().min(1).max(50_000),
+      expectedHash: z.string(),
+    }),
+    ["extension-page"],
+    (p) => editSegment(p.transcript, p.index, p.text, p.expectedHash),
+  );
+  bus.on(
+    "transcript.undo",
+    z.object({ transcriptId: z.string(), expectedHash: z.string() }),
+    ["extension-page"],
+    (p) => undoEdit(p.transcriptId, p.expectedHash),
+  );
   bus.on("settings.get", z.object({}), ["extension-page"], async () =>
     getSettings(),
   );
@@ -381,8 +440,14 @@ export function registerStorageHandlers(): void {
     },
   );
 
-  bus.on("library.list", z.object({}), ["extension-page"], async () =>
-    listLibrary(),
+  bus.on(
+    "library.list",
+    z.object({
+      query: z.string().max(1000).default(""),
+      language: z.string().max(20).default(""),
+    }),
+    ["extension-page"],
+    async (p) => listLibrary(p.query, p.language),
   );
 
   bus.on(

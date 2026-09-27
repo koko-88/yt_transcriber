@@ -1,5 +1,6 @@
 // Recents + library listing helpers.
 
+import { normalizeForSearch } from "../core/search.js";
 import { getDb, type Recent } from "./db.js";
 import { logger } from "../core/logger.js";
 import type { Transcript } from "../core/model.js";
@@ -43,26 +44,54 @@ export async function recordRecent(transcript: Transcript): Promise<void> {
   }
 }
 
-export async function listLibrary(): Promise<LibraryListItem[]> {
+export async function listLibrary(
+  query = "",
+  language = "",
+): Promise<LibraryListItem[]> {
   const db = await getDb();
-  const recents = await db.getAllFromIndex("recents", "by-viewed");
-  recents.sort((a, b) => b.viewedAt - a.viewedAt);
-  const out: LibraryListItem[] = [];
-  for (const r of recents) {
-    const t = await db.get("transcripts", r.transcriptId);
-    if (!t) continue;
-    out.push({
-      videoId: r.videoId,
-      transcriptId: r.transcriptId,
-      title: r.title,
-      channelName: r.channelName,
-      thumbnailUrl: r.thumbnailUrl,
-      viewedAt: r.viewedAt,
-      languageCode: t.track.languageCode,
-      segmentCount: t.segments.length,
-    });
+  const recents = await db.getAll("recents");
+  const viewed = new Map(recents.map((r) => [r.transcriptId, r.viewedAt]));
+  const items: LibraryListItem[] = [];
+  let cursor = await db.transaction("transcripts").store.openCursor();
+  while (cursor) {
+    const t = cursor.value;
+    if (matchesLibraryQuery(t, query, language))
+      items.push({
+        videoId: t.video.videoId,
+        transcriptId: t.id,
+        title: t.video.title,
+        channelName: t.video.channelName,
+        thumbnailUrl: t.video.thumbnailUrl,
+        viewedAt: viewed.get(t.id) ?? t.acquiredAt,
+        languageCode: t.track.languageCode,
+        segmentCount: t.segments.length,
+      });
+    cursor = await cursor.continue();
   }
-  return out;
+  return items.sort(
+    (a, b) =>
+      b.viewedAt - a.viewedAt || a.transcriptId.localeCompare(b.transcriptId),
+  );
+}
+
+export function matchesLibraryQuery(
+  t: Transcript,
+  query: string,
+  language: string,
+): boolean {
+  if (language && t.track.languageCode !== language) return false;
+  const q = normalizeForSearch(query.trim());
+  return (
+    !q ||
+    normalizeForSearch(
+      [
+        t.video.title,
+        t.video.channelName ?? "",
+        t.video.videoId,
+        ...t.segments.map((s) => s.text),
+      ].join(" "),
+    ).includes(q)
+  );
 }
 
 export async function deleteTranscriptCascade(
@@ -70,7 +99,20 @@ export async function deleteTranscriptCascade(
 ): Promise<void> {
   const db = await getDb();
   const t = await db.get("transcripts", transcriptId);
-  await db.delete("transcripts", transcriptId);
+  const tx = db.transaction(
+    ["transcripts", "edits", "notes", "highlights", "aiHistory"],
+    "readwrite",
+  );
+  await tx.objectStore("transcripts").delete(transcriptId);
+  await tx.objectStore("edits").delete(transcriptId);
+  for (const store of ["notes", "highlights", "aiHistory"] as const) {
+    let cursor = await tx.objectStore(store).openCursor();
+    while (cursor) {
+      if (cursor.value.transcriptId === transcriptId) await cursor.delete();
+      cursor = await cursor.continue();
+    }
+  }
+  await tx.done;
   if (!t) {
     logger.info("storage", "deleted transcript record", { transcriptId });
     return;

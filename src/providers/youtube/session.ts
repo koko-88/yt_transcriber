@@ -367,10 +367,17 @@ export function startYouTubeSession(): void {
 
   bus.on(
     "acq.seek",
-    z.object({ timeMs: z.number().int().nonnegative() }),
+    z.object({
+      timeMs: z.number().int().nonnegative(),
+      videoId: z.string().optional(),
+    }),
     ["extension-page"],
     async (payload) => {
+      if (payload.videoId && videoIdFromUrl(location.href) !== payload.videoId)
+        return { ok: false };
       if (!(await ensureBridge())) return { ok: false };
+      if (payload.videoId && videoIdFromUrl(location.href) !== payload.videoId)
+        return { ok: false };
       try {
         await bridge.seek(payload.timeMs / 1000);
         return { ok: true };

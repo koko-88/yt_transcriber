@@ -8,6 +8,7 @@ import { searchSegments, findHighlightRanges } from "../../core/search.js";
 import { toParagraphs } from "../../core/paragraphs.js";
 import { formatTimestamp } from "../../core/export.js";
 import { findActiveItemIndex } from "../../core/playback-index.js";
+import { TranscriptEditor } from "../components/TranscriptEditor.js";
 import { ActionsMenu } from "../components/ActionsMenu.js";
 import type { TranscriptSegment } from "../../core/model.js";
 import type { Availability } from "../../core/result.js";
@@ -202,9 +203,43 @@ export function TranscriptView() {
               className="btn primary"
               onClick={() => void s.startTranscription()}
             >
-              {s.tr("transcript.stt.retry")}
+              {s.tr(
+                s.sttCheckpoint ? "workspace.resume" : "transcript.stt.retry",
+              )}
             </button>
           )}
+        {s.sttPreview.length > 0 && (
+          <section className="workspace-card">
+            <h3>{s.tr("workspace.partial")}</h3>
+            <p className="hint">{s.tr("workspace.sttHint")}</p>
+            <details>
+              <summary>
+                {s.tr("transcript.segments", { count: s.sttPreview.length })}
+              </summary>
+              <div className="partial-preview">
+                {s.sttPreview.map((segment) => (
+                  <p key={segment.index}>
+                    <span className="ts">
+                      {formatTimestamp(segment.startMs)}
+                    </span>{" "}
+                    {segment.text}
+                  </p>
+                ))}
+              </div>
+            </details>
+            {(s.sttPhase === "error" || s.sttPhase === "cancelled") && (
+              <button
+                className="btn"
+                onClick={() => {
+                  if (window.confirm(s.tr("workspace.restartConfirm")))
+                    void s.startTranscription(true, true);
+                }}
+              >
+                {s.tr("workspace.restart")}
+              </button>
+            )}
+          </section>
+        )}
         {s.shellStatus !== "ready" &&
           s.shellStatus !== "no-video-tab" &&
           s.shellStatus !== "unsupported-page" && (
@@ -249,6 +284,20 @@ export function TranscriptView() {
 
   return (
     <div className="view transcript-view">
+      <div className="toolbar">
+        <button className="btn" onClick={() => void s.openSource()}>
+          {s.tr("workspace.openSource")}
+        </button>
+        {s.savedView && (
+          <>
+            <span className="hint">{s.tr("workspace.savedView")}</span>
+            <button className="btn" onClick={() => void s.returnToVideo()}>
+              {s.tr("workspace.returnVideo")}
+            </button>
+          </>
+        )}
+      </div>
+      <TranscriptEditor key={transcript.id} />
       <div className="transcript-head">
         <div className="meta">
           <h2>{transcript.video.title}</h2>
@@ -279,7 +328,7 @@ export function TranscriptView() {
             value={transcript.track.trackId}
             onChange={(e) => void s.acquire(e.target.value)}
             aria-label={s.tr("transcript.tracks")}
-            disabled={s.loading || s.tracks.length === 0}
+            disabled={s.savedView || s.loading || s.tracks.length === 0}
           >
             {!s.tracks.some(
               (track) => track.trackId === transcript.track.trackId,
@@ -337,19 +386,11 @@ export function TranscriptView() {
             transcript={transcript}
             viewMode={s.viewMode}
             tr={s.tr}
-            canSave={!!s.videoId && !s.savedVideoIds.has(s.videoId)}
+            canSave={
+              !s.recents.some((item) => item.transcriptId === transcript.id)
+            }
             onSave={() => void s.saveCurrentToLibrary()}
-            onAddNote={() => {
-              const text = window.prompt(s.tr("notes.placeholder"));
-              if (!text?.trim()) return;
-              void bus.request("notes.upsert", {
-                id: crypto.randomUUID(),
-                videoId: transcript.video.videoId,
-                transcriptId: transcript.id,
-                text: text.trim(),
-                startMs: s.playbackMs,
-              });
-            }}
+            onAddNote={() => s.setTab("notes")}
           />
         </div>
       </div>

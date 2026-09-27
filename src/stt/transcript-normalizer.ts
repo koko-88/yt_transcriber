@@ -7,7 +7,7 @@ export interface SttCue {
   timestamp: [number, number | null];
 }
 
-interface Candidate {
+export interface Candidate {
   startMs: number;
   endMs: number;
   text: string;
@@ -37,10 +37,31 @@ function duplicatePrefix(previous: string, current: string): number {
   return 0;
 }
 
+export interface NormalizerState {
+  pending: Candidate[] | null;
+  output: TranscriptSegment[];
+}
+
 /** Owns the center of each overlap and reconciles repeated boundary words. */
 export class TranscriptNormalizer {
   private pending: Candidate[] | null = null;
   private readonly output: TranscriptSegment[] = [];
+
+  constructor(state?: NormalizerState) {
+    this.pending = state?.pending?.map((cue) => ({ ...cue })) ?? null;
+    this.output = state?.output.map((segment) => ({ ...segment })) ?? [];
+  }
+
+  snapshot(): NormalizerState {
+    return {
+      pending: this.pending?.map((cue) => ({ ...cue })) ?? null,
+      output: this.output.map((segment) => ({ ...segment })),
+    };
+  }
+
+  preview(): TranscriptSegment[] {
+    return new TranscriptNormalizer(this.snapshot()).finish();
+  }
 
   addWindow(window: PcmWindow, cues: SttCue[]): void {
     const candidates = cues.flatMap((cue): Candidate[] => {

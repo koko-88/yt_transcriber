@@ -68,7 +68,7 @@ test("background service worker starts", async () => {
   expect(extensionId).toBeTruthy();
 });
 
-test("side panel renders all four tabs without console errors", async () => {
+test("side panel renders every primary tab without console errors", async () => {
   const page = await openPanel();
   const errors: string[] = [];
   page.on("console", (msg) => {
@@ -76,11 +76,11 @@ test("side panel renders all four tabs without console errors", async () => {
   });
   page.on("pageerror", (err) => errors.push(err.message));
 
-  for (const name of ["Transcript", "Library", "AI", "Settings"]) {
+  for (const name of ["Transcript", "Library", "Notes", "AI", "Settings"]) {
     await expect(page.getByRole("tab", { name })).toBeVisible();
   }
 
-  for (const name of ["Library", "AI", "Settings", "Transcript"]) {
+  for (const name of ["Library", "Notes", "AI", "Settings", "Transcript"]) {
     await page.getByRole("tab", { name }).click();
   }
 
@@ -122,7 +122,13 @@ test("AI tab lists providers", async () => {
 
 test("axe: no critical/serious issues on primary tabs", async () => {
   const page = await openPanel();
-  for (const tab of ["Settings", "AI", "Library", "Transcript"] as const) {
+  for (const tab of [
+    "Settings",
+    "AI",
+    "Notes",
+    "Library",
+    "Transcript",
+  ] as const) {
     await page.getByRole("tab", { name: tab }).click();
     const results = await new AxeBuilder({ page })
       .withTags(["wcag2a", "wcag2aa"])
@@ -291,7 +297,14 @@ test("deterministic YouTube fixture acquires and replaces the transcript after S
   await expect(panel.locator(".transcript-head")).toBeVisible({
     timeout: 20_000,
   });
-  await expect(panel.getByText("Start A", { exact: false })).toBeVisible();
+  // Scope to the transcript reading area: the correction editor below the
+  // header holds the same segment text in a textarea, which would make a
+  // panel-wide text match ambiguous (Playwright strict mode).
+  const caption = (label: string) =>
+    panel
+      .locator(".transcript-scroll")
+      .getByText(`Start ${label}`, { exact: false });
+  await expect(caption("A")).toBeVisible();
 
   await video.evaluate((nextId) => {
     (window as typeof window & { fixtureVideoId: string }).fixtureVideoId =
@@ -299,10 +312,8 @@ test("deterministic YouTube fixture acquires and replaces the transcript after S
     history.pushState(null, "", `/watch?v=${nextId}`);
     document.dispatchEvent(new Event("yt-navigate-finish"));
   }, videoB);
-  await expect(panel.getByText("Start B", { exact: false })).toBeVisible({
-    timeout: 20_000,
-  });
-  await expect(panel.getByText("Start A", { exact: false })).toHaveCount(0);
+  await expect(caption("B")).toBeVisible({ timeout: 20_000 });
+  await expect(caption("A")).toHaveCount(0);
   await panel.close();
   await video.close();
 });

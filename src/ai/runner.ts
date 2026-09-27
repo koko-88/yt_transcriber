@@ -13,7 +13,10 @@ import { getProviderDef } from "./registry.js";
 
 const perms = createPermissionManager();
 const encoder = new TextEncoder();
-import { buildMessages, groundAiOutput, PROMPT_VERSION } from "./pipelines.js";
+import { PROMPT_VERSION, validateCitations } from "./pipelines.js";
+import { runFullVideo, splitTranscript, type Coverage } from "./full-video.js";
+import { saveTranscript } from "../storage/transcripts.js";
+import { saveAiHistory } from "../storage/ai-history.js";
 import { chatCompletion } from "./providers/openai-compat.js";
 import { geminiGenerate } from "./providers/gemini.js";
 import type { AiRunRequest, AiRunResult } from "./types.js";
@@ -79,6 +82,7 @@ export async function runAi(
   req: AiRunRequest,
   consentGiven = false,
   signal?: AbortSignal,
+  progress?: (coverage: Coverage) => void,
 ): Promise<AiRunResult> {
   try {
     const def = getProviderDef(req.providerId);
@@ -137,42 +141,76 @@ export async function runAi(
       };
     }
 
-    const messages = buildMessages(req.pipeline, transcript, req.question);
     const tHash = hashText(segmentsToText(transcript.segments));
-    const cacheKey = `${tHash}:${req.pipeline}:${req.model}:${PROMPT_VERSION}:${req.question ?? ""}`;
+    const cacheKey = `${tHash}:${req.pipeline}:${def.id}:${req.model}:${PROMPT_VERSION}:${req.question ?? ""}`;
 
     const cached = await cacheGet(cacheKey);
-    if (cached)
-      return { ok: true, text: cached, provider: def.label, model: req.model };
-
-    if (signal?.aborted) {
-      throw new AppError({
-        code: "AI_CANCELLED",
-        message: "cancelled",
-        retryable: false,
-      });
-    }
-
-    await getRateLimiter(def.id).acquire();
-
     const fn = def.kind === "gemini" ? geminiGenerate : chatCompletion;
-    const raw = await fn({
-      baseUrl: def.baseUrl,
+    const call = async (messages: import("./types.js").ChatMessage[]) => {
+      if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+      const latest = await getSettings();
+      if ((latest.strictMode && !def.isLocal) || !latest.consents[def.id])
+        throw new AppError({
+          code: "AI_BLOCKED_STRICT",
+          message: "AI permission changed",
+        });
+      await getRateLimiter(def.id).acquire();
+      if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+      return fn({
+        baseUrl: def.baseUrl,
+        model: req.model,
+        messages,
+        secret: secret!,
+        maxTokens: 1600,
+        ...(signal ? { signal } : {}),
+      });
+    };
+    const count =
+      req.pipeline === "qa" ? 1 : splitTranscript(transcript).length;
+    const completed = cached
+      ? { text: cached, coverage: { processed: count, total: count } }
+      : await runFullVideo(
+          req.pipeline,
+          transcript,
+          req.question,
+          call,
+          signal,
+          progress,
+        );
+    if (signal?.aborted) throw new DOMException("Cancelled", "AbortError");
+    const grounded = validateCitations(completed.text, transcript.segments, 0);
+    const text = grounded.text;
+    if (!cached) await cachePut(cacheKey, text);
+    await saveTranscript(transcript);
+    const historyId = crypto.randomUUID();
+    await saveAiHistory({
+      id: historyId,
+      videoId: transcript.video.videoId,
+      transcriptId: transcript.id,
+      transcriptHash: tHash,
+      pipeline: req.pipeline,
+      ...(req.question ? { question: req.question } : {}),
+      provider: def.label,
       model: req.model,
-      messages,
-      secret: secret!,
-      ...(signal ? { signal } : {}),
+      text,
+      createdAt: Date.now(),
+      coverage: completed.coverage,
+      citations: grounded.valid,
     });
-
-    const text = groundAiOutput(req.pipeline, raw, transcript);
-    await cachePut(cacheKey, text);
     logger.info("ai", "pipeline completed", {
       pipeline: req.pipeline,
       provider: def.id,
       model: req.model,
       chars: text.length,
     });
-    return { ok: true, text, provider: def.label, model: req.model };
+    return {
+      ok: true,
+      text,
+      provider: def.label,
+      model: req.model,
+      coverage: completed.coverage,
+      historyId,
+    };
   } catch (err) {
     if (signal?.aborted) {
       return {

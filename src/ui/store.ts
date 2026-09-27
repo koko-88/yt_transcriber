@@ -7,6 +7,7 @@ import { browser } from "wxt/browser";
 import { bus } from "../platform/messaging.js";
 import { logger } from "../core/logger.js";
 import { AppError } from "../core/errors.js";
+import type { TranscriptSegment } from "../core/model.js";
 import type { Transcript, TranscriptTrack } from "../core/model.js";
 import type { AcquisitionResult, Availability } from "../core/result.js";
 import { AcquisitionResultSchema, TranscriptSchema } from "../core/schemas.js";
@@ -17,7 +18,7 @@ import type { Locale, MessageKey } from "../core/i18n.js";
 import { t as translate } from "../core/i18n.js";
 import type { PanelContext } from "../platform/tab-context.js";
 
-export type PanelTab = "transcript" | "library" | "ai" | "settings";
+export type PanelTab = "transcript" | "library" | "notes" | "ai" | "settings";
 export type ViewMode = "paragraph" | "raw";
 export type ShellStatus =
   | "ready"
@@ -51,6 +52,11 @@ interface PanelState {
   tracks: TranscriptTrack[];
   metadata: VideoPageState["metadata"];
 
+  savedView: boolean;
+  actionError: string | null;
+  openSource(timeMs?: number): Promise<void>;
+  returnToVideo(): Promise<void>;
+
   // transcript view
   transcript: Transcript | null;
   loading: boolean;
@@ -62,6 +68,8 @@ interface PanelState {
     "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
   sttProgress: number;
   sttError: string | null;
+  sttPreview: TranscriptSegment[];
+  sttCheckpoint: boolean;
   searchQuery: string;
 
   // library
@@ -80,7 +88,7 @@ interface PanelState {
     opts?: { allowPlaybackMutation?: boolean },
   ): Promise<void>;
   seek(timeMs: number): Promise<void>;
-  startTranscription(): Promise<void>;
+  startTranscription(resume?: boolean, restart?: boolean): Promise<void>;
   cancelTranscription(): Promise<void>;
   saveCurrentToLibrary(): Promise<void>;
   removeFromLibrary(transcriptId: string): Promise<void>;
@@ -133,6 +141,8 @@ async function startPlaybackStream(
       if (
         document.hidden ||
         sample.videoId !== get().videoId ||
+        (get().transcript != null &&
+          sample.videoId !== get().transcript?.video.videoId) ||
         !Number.isFinite(sample.timeSeconds) ||
         typeof sample.playing !== "boolean"
       )
@@ -162,6 +172,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   tracks: [],
   metadata: null,
 
+  savedView: false,
+  actionError: null,
   transcript: null,
   loading: false,
   viewMode: "paragraph",
@@ -171,6 +183,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   sttPhase: "idle",
   sttProgress: 0,
   sttError: null,
+  sttPreview: [],
+  sttCheckpoint: false,
   searchQuery: "",
 
   recents: [],
@@ -203,6 +217,17 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         payload?: { videoId?: string | null };
       };
       if (msg?.type === "panel.videoChanged") {
+        if (get().savedView) {
+          playbackPort?.disconnect();
+          playbackPort = null;
+          set({
+            videoId: msg.payload?.videoId ?? null,
+            playbackMs: 0,
+            playing: false,
+          });
+          void startPlaybackStream(get, set);
+          return;
+        }
         if (get().sttPhase === "preparing" || get().sttPhase === "transcribing")
           void bus.request("stt.cancel").catch(() => undefined);
         pageEpoch++;
@@ -221,6 +246,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           sttPhase: "idle",
           sttProgress: 0,
           sttError: null,
+          sttPreview: [],
+          sttCheckpoint: false,
         });
         void get().refreshPageState();
       }
@@ -231,8 +258,10 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           progress?: number;
           error?: string;
           transcript?: unknown;
+          partialSegments?: TranscriptSegment[];
+          checkpointAvailable?: boolean;
         };
-        if (update.videoId !== get().videoId) return;
+        if (update.videoId !== get().videoId || get().savedView) return;
         const parsed = update.transcript
           ? TranscriptSchema.safeParse(update.transcript)
           : null;
@@ -240,6 +269,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           sttPhase: update.phase ?? "idle",
           sttProgress: Number.isFinite(update.progress) ? update.progress! : 0,
           sttError: update.error ?? null,
+          sttPreview: update.partialSegments ?? get().sttPreview,
+          sttCheckpoint: update.checkpointAvailable ?? false,
           ...(parsed?.success
             ? { transcript: parsed.data, availability: "available" as const }
             : {}),
@@ -283,6 +314,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
 
   async refreshPageState() {
+    if (get().savedView) return;
     const epoch = pageEpoch;
     const retryTransientFailure = () => {
       if (epoch !== pageEpoch || refreshRetryCount >= 8) return;
@@ -362,7 +394,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         !get().transcript &&
         get().sttPhase === "idle"
       ) {
-        void get().startTranscription();
+        void get().startTranscription(false);
       }
     } catch (e) {
       logger.warn("panel", "video context or content routing failed", {
@@ -384,6 +416,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
 
   async acquire(trackId, opts) {
+    if (get().savedView) return;
     const expectedVideoId = get().videoId;
     if (!expectedVideoId) return;
     const epoch = ++acquireEpoch;
@@ -418,7 +451,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         }
       } else {
         set({ availability: result.reason, transcript: null });
-        if (result.reason === "no-captions") void get().startTranscription();
+        if (result.reason === "no-captions")
+          void get().startTranscription(false);
       }
     } catch (e) {
       if (epoch !== acquireEpoch || get().videoId !== expectedVideoId) return;
@@ -434,15 +468,57 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
 
   async seek(timeMs) {
+    const videoId = get().transcript?.video.videoId;
+    if (!videoId) return;
+    set({ actionError: null });
     try {
-      const result = await bus.request<{ ok: boolean }>("acq.seek", { timeMs });
-      if (result.ok) set({ playbackMs: timeMs });
+      const context = await bus.request<PanelContext>("panel.context");
+      if (get().transcript?.video.videoId !== videoId) return;
+      if (context.videoId !== videoId) {
+        await get().openSource(timeMs);
+        return;
+      }
+      const result = await bus.request<{ ok: boolean }>("acq.seek", {
+        timeMs,
+        videoId,
+      });
+      if (!result.ok) throw new Error(get().tr("workspace.seekFailed"));
+      if (get().transcript?.video.videoId === videoId)
+        set({ playbackMs: timeMs });
     } catch (e) {
-      logger.warn("panel", "seek failed", { error: String(e) });
+      set({ actionError: e instanceof Error ? e.message : String(e) });
     }
   },
+  async openSource(timeMs = 0) {
+    const videoId = get().transcript?.video.videoId;
+    if (!videoId) return;
+    set({ actionError: null });
+    try {
+      const result = await bus.request<{ ok: boolean }>("video.open", {
+        videoId,
+        timeMs,
+      });
+      if (!result.ok) throw new Error(get().tr("workspace.seekFailed"));
+    } catch (error) {
+      set({ actionError: String(error) });
+    }
+  },
+  async returnToVideo() {
+    pageEpoch++;
+    acquireEpoch++;
+    set({
+      savedView: false,
+      transcript: null,
+      searchQuery: "",
+      actionError: null,
+      sttPhase: "idle",
+      sttPreview: [],
+      sttCheckpoint: false,
+    });
+    await get().refreshPageState();
+  },
 
-  async startTranscription() {
+  async startTranscription(resume = true, restart = false) {
     const videoId = get().videoId;
     if (!videoId) return;
     set({ sttPhase: "preparing", sttProgress: 0, sttError: null });
@@ -452,14 +528,22 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         phase: PanelState["sttPhase"];
         progress: number;
         transcript?: unknown;
+        partialSegments?: TranscriptSegment[];
+        checkpointAvailable?: boolean;
       }>("stt.status", { videoId });
       if (get().videoId !== videoId) return;
       const result =
+        !restart &&
         existing.videoId === videoId &&
-        existing.phase !== "cancelled" &&
-        existing.phase !== "error"
+        ((existing.phase !== "cancelled" &&
+          existing.phase !== "error" &&
+          existing.phase !== "idle") ||
+          (!resume && existing.checkpointAvailable))
           ? existing
-          : await bus.request<typeof existing>("stt.start", { videoId });
+          : await bus.request<typeof existing>("stt.start", {
+              videoId,
+              restart,
+            });
       if (get().videoId !== videoId) return;
       const parsed = result.transcript
         ? TranscriptSchema.safeParse(result.transcript)
@@ -467,6 +551,8 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       set({
         sttPhase: result.phase,
         sttProgress: result.progress,
+        sttPreview: result.partialSegments ?? get().sttPreview,
+        sttCheckpoint: result.checkpointAvailable ?? false,
         ...(parsed?.success
           ? { transcript: parsed.data, availability: "available" as const }
           : {}),
@@ -507,12 +593,38 @@ export const usePanelStore = create<PanelState>((set, get) => ({
   },
 
   async openSaved(transcriptId) {
-    const t = await bus.request<Transcript | null>("transcript.get", {
-      id: transcriptId,
-    });
-    if (t) {
-      set({ transcript: t, tab: "transcript", availability: "available" });
+    const epoch = ++acquireEpoch;
+    pageEpoch++;
+    set({ savedView: true, loading: true, actionError: null });
+    let t: Transcript | null;
+    try {
+      t = await bus.request<Transcript | null>("transcript.get", {
+        id: transcriptId,
+      });
+    } catch (error) {
+      if (epoch === acquireEpoch)
+        set({ savedView: false, loading: false, actionError: String(error) });
+      throw error;
     }
+    if (epoch !== acquireEpoch) return;
+    if (t) {
+      set({
+        transcript: t,
+        tab: "transcript",
+        shellStatus: "ready",
+        availability: "available",
+        tracks: [],
+        searchQuery: "",
+        playbackMs: 0,
+        follow: false,
+        loading: false,
+      });
+    } else
+      set({
+        savedView: false,
+        loading: false,
+        actionError: get().tr("general.error"),
+      });
   },
 
   async updateSettings(patch) {

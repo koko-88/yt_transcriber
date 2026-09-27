@@ -573,3 +573,80 @@ select:focus {
     scroll-behavior: auto !important;
   }
 }
+
+/* Workspace tools share the panel's semantic colors and logical spacing. */
+[hidden] {
+  display: none !important;
+}
+.workspace-card {
+  border: 1px solid var(--ui-border);
+  border-radius: var(--core-radius-md);
+  padding: var(--core-space-12);
+  background: var(--ui-surface);
+  min-inline-size: 0;
+}
+.workspace-card + .workspace-card {
+  margin-block-start: var(--core-space-8);
+}
+.workspace-card label,
+.view > label {
+  display: grid;
+  gap: var(--core-space-4);
+  margin-block: var(--core-space-8);
+}
+.workspace-card textarea {
+  inline-size: 100%;
+  resize: vertical;
+  font: inherit;
+  color: var(--ui-text);
+  background: var(--ui-canvas);
+  border: 1px solid var(--ui-border);
+  padding: var(--core-space-8);
+  border-radius: var(--component-control-radius);
+}
+.workspace-row {
+  display: flex;
+  align-items: center;
+  gap: var(--core-space-8);
+  min-inline-size: 0;
+}
+.workspace-row .library-item {
+  flex: 1;
+  min-inline-size: 0;
+}
+.workspace-row .hint {
+  display: block;
+}
+.preserve-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.workspace-card summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.workspace-card .toolbar,
+.view > .toolbar {
+  flex-wrap: wrap;
+}
+.transcript-view > details {
+  flex: 0 0 auto;
+  max-block-size: 45vh;
+  overflow: auto;
+}
+
+.partial-preview {
+  max-block-size: 40vh;
+  overflow: auto;
+  text-align: start;
+}
+
+.workspace-pane {
+  display: flex;
+  flex: 1;
+  min-block-size: 0;
+  flex-direction: column;
+}
+.workspace-card > select {
+  max-inline-size: 100%;
+}

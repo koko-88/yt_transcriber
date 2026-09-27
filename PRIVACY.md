@@ -1,13 +1,10 @@
 # Privacy Policy
 
-_Transcript Workbench for YouTube_ — last updated 2026-09-24.
+_Transcript Workbench for YouTube_ — last updated 2026-09-27.
 
 ## Summary
 
-The extension has no backend. It does not collect, transmit or sell personal
-data. Everything it stores lives in your own browser profile, and network
-requests happen only when you ask the extension to call an AI provider you
-configured.
+The extension has no backend or analytics. Saved work lives in your browser profile. Caption/media requests and model downloads contact their source hosts. AI text is sent directly to your configured provider only after an explicit action and consent.
 
 ## What is stored, and where
 
@@ -24,6 +21,14 @@ configured.
 No browsing history, no page content, no keystrokes, no analytics, no crash
 reporting, no remote configuration.
 
+## Workspace persistence
+
+Original and corrected transcripts, the last 100 undo operations per transcript, notes, and completed AI answers (including questions, provider/model, coverage and citation timestamps) are stored in extension-origin IndexedDB. Completed AI answers are saved history, separate from the 200-entry request cache. Local backups include this saved work but never API keys.
+
+Speech-recognition checkpoints contain the video ID, model/profile identity, duration, recognized text and overlap state. They do not contain audio or media URLs. They are excluded from backups, expire after seven days, and are removed when recognized work completes or you explicitly discard it. Expired checkpoints are cleaned on access or the next checkpoint write.
+
+The media observation cache uses temporary browser session storage for expiring, tab/video-bound Googlevideo URLs; it is not permanent library storage.
+
 ## Network requests we make
 
 1. **YouTube caption data** — when you open a video page, the content script
@@ -37,8 +42,7 @@ reporting, no remote configuration.
    provider's own privacy policy then applies to that request. On Firefox, the
    extension declares optional `websiteContent` data collection and requests
    consent via the built-in permissions UI before the first send.
-3. **Thumbnails** — the library list loads video thumbnails from
-   `i.ytimg.com`, as YouTube's own pages do.
+3. **Local speech recognition** — the existing media pipeline downloads the active video's audio from YouTube/Googlevideo and runs recognition locally. Model/tokenizer files are downloaded from the configured Hugging Face model hosts and may be cached locally. Audio is not sent to an AI provider.
 
 Strict Local Mode (Settings) blocks category 2 entirely except for
 `localhost`/`127.0.0.1` servers you run yourself.
@@ -48,6 +52,8 @@ Strict Local Mode (Settings) blocks category 2 entirely except for
 - Delete a saved transcript: **Library → ✕**.
 - Export / import a library backup: **Settings → Backup** (API keys are never
   included).
+- Delete a saved AI answer: **AI → Saved AI answers → Delete**.
+- Discard interrupted transcription progress: **Discard progress and restart**.
 - Delete an API key: **AI → Delete**.
 - Revoke a provider permission: your browser's extension settings for this
   extension (_Site access_ / _Permissions_).

@@ -111,10 +111,7 @@ export function SettingsView() {
 
       <div className="settings-row">
         <label>{s.tr("settings.backup")}</label>
-        <div className="hint">
-          Exports saved transcripts, notes and highlights. API keys are never
-          included.
-        </div>
+        <div className="hint">{s.tr("workspace.backupHint")}</div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <button
             className="btn"

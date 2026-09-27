@@ -3,8 +3,14 @@ import { logger } from "@/core/logger";
 import { AppError } from "@/core/errors";
 import type { Transcript, VideoMetadata } from "@/core/model";
 
+import type {
+  TranscriptEdit,
+  AiHistoryEntry,
+  SttCheckpoint,
+} from "./workspace-types.js";
+
 const DB_NAME = "yt-transcript-workbench";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 export interface Note {
   id: string; // crypto.randomUUID()
@@ -68,6 +74,13 @@ export interface MetaStore {
 }
 
 export interface WorkbenchDB extends DBSchema {
+  edits: { key: string; value: TranscriptEdit };
+  aiHistory: {
+    key: string;
+    value: AiHistoryEntry;
+    indexes: { "by-video": string };
+  };
+  sttCheckpoints: { key: string; value: SttCheckpoint };
   transcripts: {
     key: string; // transcript.id
     value: Transcript;
@@ -175,6 +188,12 @@ export function getDb(): Promise<IDBPDatabase<WorkbenchDB>> {
 
           db.createObjectStore("secrets", { keyPath: "providerId" });
           db.createObjectStore("meta", { keyPath: "key" });
+        }
+        if (oldVersion < 2) {
+          db.createObjectStore("edits", { keyPath: "transcriptId" });
+          const history = db.createObjectStore("aiHistory", { keyPath: "id" });
+          history.createIndex("by-video", "videoId");
+          db.createObjectStore("sttCheckpoints", { keyPath: "videoId" });
         }
       },
       blocked() {

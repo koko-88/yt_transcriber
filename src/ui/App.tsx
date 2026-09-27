@@ -5,11 +5,14 @@ import { usePanelStore } from "./store.js";
 import { TranscriptView } from "./views/TranscriptView.js";
 import { LibraryView } from "./views/LibraryView.js";
 import { AiView } from "./views/AiView.js";
+import { NotesView } from "./views/NotesView.js";
 import { SettingsView } from "./views/SettingsView.js";
 
-const TABS = ["transcript", "library", "ai", "settings"] as const;
+const TABS = ["transcript", "library", "notes", "ai", "settings"] as const;
 
 export function App() {
+  const transcriptId = usePanelStore((s) => s.transcript?.id);
+  const actionError = usePanelStore((s) => s.actionError);
   const ready = usePanelStore((s) => s.ready);
   const tab = usePanelStore((s) => s.tab);
   const setTab = usePanelStore((s) => s.setTab);
@@ -53,6 +56,11 @@ export function App() {
           <div className="app-subtitle">YouTube</div>
         </div>
       </header>
+      {actionError && (
+        <p className="banner" role="alert">
+          {actionError}
+        </p>
+      )}
       <nav className="tabbar" role="tablist" aria-label={tr("app.name")}>
         {TABS.map((id) => (
           <button
@@ -92,7 +100,12 @@ export function App() {
       >
         {tab === "transcript" && <TranscriptView />}
         {tab === "library" && <LibraryView />}
-        {tab === "ai" && <AiView />}
+        <div className="workspace-pane" hidden={tab !== "ai"}>
+          <AiView />
+        </div>
+        <div className="workspace-pane" hidden={tab !== "notes"}>
+          <NotesView key={transcriptId} />
+        </div>
         {tab === "settings" && <SettingsView />}
       </div>
     </div>

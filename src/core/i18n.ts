@@ -12,6 +12,48 @@ export function getDirection(locale: Locale): Direction {
 
 export const messages = {
   en: {
+    "workspace.backupHint":
+      "Exports saved transcripts, corrections, notes, highlights and AI history. API keys are never included.",
+    "workspace.excerpts": "Answer based on retrieved excerpts",
+    "nav.notes": "Notes",
+    "workspace.librarySearch": "Search saved transcripts and titles",
+    "workspace.allLanguages": "All languages",
+    "workspace.savedCount": "{count} saved transcripts",
+    "workspace.more": "Show more",
+    "workspace.deleteSaved":
+      "Delete this saved transcript, its notes and AI history?",
+    "workspace.seekFailed":
+      "Could not seek this video. Open the source video and retry.",
+    "workspace.openSource": "Open source video",
+    "workspace.returnVideo": "Return to active video",
+    "workspace.savedView": "Viewing saved work",
+    "workspace.edit": "Edit",
+    "workspace.notesEmpty": "No notes yet. Add one below.",
+    "workspace.noteText": "Note text",
+    "workspace.noteTime": "Timestamp (seconds, optional)",
+    "workspace.noteAdd": "Add note",
+    "workspace.notesExport": "Export notes (Markdown)",
+    "workspace.original": "Original",
+    "workspace.corrected": "Corrected",
+    "workspace.corrections": "Transcript corrections",
+    "workspace.segmentNumber": "Segment number",
+    "workspace.segmentText": "Segment text",
+    "workspace.undo": "Undo last correction",
+    "workspace.editHint":
+      "Edits are saved locally. Exports and AI use the displayed version.",
+    "workspace.history": "Saved AI answers",
+    "workspace.historyEmpty": "No saved answers for this video.",
+    "workspace.coverage": "Sections processed: {processed}/{total}",
+    "workspace.aiScope":
+      "Long videos are processed in sections; this may use multiple AI requests.",
+    "workspace.previousVersion": "Answer from a different transcript version",
+    "workspace.partial": "Partial transcript — saved progress",
+    "workspace.resume": "Resume transcription",
+    "workspace.restart": "Discard progress and restart",
+    "workspace.restartConfirm":
+      "Discard saved transcription progress for this video?",
+    "workspace.sttHint":
+      "Completed speech-recognition windows are saved locally. Resume revalidates the source and may decode earlier audio again.",
     // App
     "app.name": "Transcript Workbench",
     "app.tagline": "Your data stays local, your AI is your choice.",
@@ -231,6 +273,46 @@ export const messages = {
     "general.success": "Success",
   },
   ar: {
+    "workspace.backupHint":
+      "يصدّر النصوص والتصحيحات والملاحظات والتحديدات وسجل الذكاء الاصطناعي. لا تُصدّر مفاتيح API.",
+    "workspace.excerpts": "إجابة مبنية على المقاطع المسترجعة",
+    "nav.notes": "ملاحظات",
+    "workspace.librarySearch": "البحث في النصوص والعناوين المحفوظة",
+    "workspace.allLanguages": "كل اللغات",
+    "workspace.savedCount": "{count} نصوص محفوظة",
+    "workspace.more": "عرض المزيد",
+    "workspace.deleteSaved":
+      "حذف النص المحفوظ وملاحظاته وسجل الذكاء الاصطناعي؟",
+    "workspace.seekFailed": "تعذر الانتقال. افتح الفيديو الأصلي وحاول مجدداً.",
+    "workspace.openSource": "فتح الفيديو الأصلي",
+    "workspace.returnVideo": "العودة للفيديو الحالي",
+    "workspace.savedView": "عرض العمل المحفوظ",
+    "workspace.edit": "تعديل",
+    "workspace.notesEmpty": "لا توجد ملاحظات. أضف ملاحظة أدناه.",
+    "workspace.noteText": "نص الملاحظة",
+    "workspace.noteTime": "الوقت (بالثواني، اختياري)",
+    "workspace.noteAdd": "إضافة ملاحظة",
+    "workspace.notesExport": "تصدير الملاحظات (Markdown)",
+    "workspace.original": "الأصلي",
+    "workspace.corrected": "المصحح",
+    "workspace.corrections": "تصحيح النص",
+    "workspace.segmentNumber": "رقم المقطع",
+    "workspace.segmentText": "نص المقطع",
+    "workspace.undo": "التراجع عن آخر تصحيح",
+    "workspace.editHint":
+      "تُحفظ التعديلات محلياً. التصدير والذكاء الاصطناعي يستخدمان النسخة المعروضة.",
+    "workspace.history": "إجابات الذكاء الاصطناعي المحفوظة",
+    "workspace.historyEmpty": "لا توجد إجابات محفوظة لهذا الفيديو.",
+    "workspace.coverage": "الأقسام المعالجة: {processed}/{total}",
+    "workspace.aiScope":
+      "تُعالج الفيديوهات الطويلة على أقسام وقد تتطلب طلبات متعددة.",
+    "workspace.previousVersion": "إجابة من نسخة مختلفة للنص",
+    "workspace.partial": "نص جزئي — تقدم محفوظ",
+    "workspace.resume": "استئناف التفريغ",
+    "workspace.restart": "حذف التقدم والبدء من جديد",
+    "workspace.restartConfirm": "حذف تقدم التفريغ المحفوظ لهذا الفيديو؟",
+    "workspace.sttHint":
+      "تُحفظ المقاطع المكتملة محلياً. يتحقق الاستئناف من المصدر وقد يعيد فك صوت سابق.",
     // App
     "app.name": "منصة النسخ النصي",
     "app.tagline": "بياناتك محلية، والذكاء الاصطناعي خيارك.",
