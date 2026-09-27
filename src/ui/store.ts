@@ -106,6 +106,7 @@ function resolveLocale(setting: AppSettings["locale"]): Locale {
 let playbackPort: ReturnType<typeof browser.tabs.connect> | null = null;
 let pageEpoch = 0;
 let acquireEpoch = 0;
+let sttRequestEpoch = 0;
 let refreshRetryCount = 0;
 
 const PLAYBACK_POLL_FOLLOW_MS = 100;
@@ -520,7 +521,15 @@ export const usePanelStore = create<PanelState>((set, get) => ({
 
   async startTranscription(resume = true, restart = false) {
     const videoId = get().videoId;
-    if (!videoId) return;
+    if (!videoId || get().savedView) return;
+    const viewEpoch = pageEpoch;
+    const requestEpoch = ++sttRequestEpoch;
+    // Opening saved work changes the view epoch even if the active video stays put.
+    const isCurrent = () =>
+      viewEpoch === pageEpoch &&
+      requestEpoch === sttRequestEpoch &&
+      !get().savedView &&
+      get().videoId === videoId;
     set({ sttPhase: "preparing", sttProgress: 0, sttError: null });
     try {
       const existing = await bus.request<{
@@ -531,7 +540,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         partialSegments?: TranscriptSegment[];
         checkpointAvailable?: boolean;
       }>("stt.status", { videoId });
-      if (get().videoId !== videoId) return;
+      if (!isCurrent()) return;
       const result =
         !restart &&
         existing.videoId === videoId &&
@@ -544,7 +553,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
               videoId,
               restart,
             });
-      if (get().videoId !== videoId) return;
+      if (!isCurrent()) return;
       const parsed = result.transcript
         ? TranscriptSchema.safeParse(result.transcript)
         : null;
@@ -558,7 +567,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           : {}),
       });
     } catch (error) {
-      if (get().videoId === videoId)
+      if (isCurrent())
         set({
           sttPhase: "error",
           sttError: error instanceof Error ? error.message : String(error),
@@ -566,8 +575,15 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     }
   },
   async cancelTranscription() {
+    const viewEpoch = pageEpoch;
+    const requestEpoch = ++sttRequestEpoch;
     await bus.request("stt.cancel").catch(() => undefined);
-    set({ sttPhase: "cancelled" });
+    if (
+      viewEpoch === pageEpoch &&
+      requestEpoch === sttRequestEpoch &&
+      !get().savedView
+    )
+      set({ sttPhase: "cancelled" });
   },
 
   async saveCurrentToLibrary() {

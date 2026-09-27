@@ -60,3 +60,20 @@ it("retains consent and strict-local gates without provider calls", async () => 
   );
   expect(chatCompletion).not.toHaveBeenCalled();
 });
+
+it("persists clickable citations for fractional source cue starts", async () => {
+  const transcript = {
+    ...fixture(),
+    segments: [{ index: 0, startMs: 5500, endMs: 8500, text: "First cue" }],
+  };
+  const result = await runAi({
+    pipeline: "summary",
+    transcript,
+    providerId: "ollama",
+    model: "test",
+  });
+  expect(result.ok).toBe(true);
+  const [entry] = await listAiHistory(transcript.video.videoId);
+  expect(entry?.text).toContain("Supported [0:05]");
+  expect(entry?.citations).toEqual([5000]);
+});

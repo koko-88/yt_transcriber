@@ -150,3 +150,112 @@ it("round-trips originals, corrected versions and AI history through backup", as
   );
   expect(await listAiHistory(t.video.videoId)).toHaveLength(1);
 });
+
+describe("STT responses stay bound to the live view", () => {
+  it.each([
+    ["stt.status", false],
+    ["stt.start", false],
+    ["stt.status", true],
+    ["stt.start", true],
+  ] as const)(
+    "ignores pending %s after opening saved work (reject=%s)",
+    async (pendingType, rejects) => {
+      const active = fixture(1);
+      const saved = fixture(2);
+      let resolveResponse!: (value: unknown) => void;
+      let rejectResponse!: (reason: Error) => void;
+      const response = new Promise((resolve, reject) => {
+        resolveResponse = resolve;
+        rejectResponse = reject;
+      });
+      let reached!: () => void;
+      const waiting = new Promise<void>((resolve) => {
+        reached = resolve;
+      });
+      const request = vi
+        .spyOn(bus, "request")
+        .mockImplementation(async (type) => {
+          if (type === pendingType) {
+            reached();
+            return response;
+          }
+          if (type === "stt.status")
+            return { videoId: null, phase: "idle", progress: 0 };
+          if (type === "transcript.get") return saved;
+          throw new Error("Unexpected request: " + type);
+        });
+      usePanelStore.setState({
+        videoId: active.video.videoId,
+        transcript: null,
+        savedView: false,
+      });
+      const pending = usePanelStore.getState().startTranscription();
+      await waiting;
+      await usePanelStore.getState().openSaved(saved.id);
+      const pinned = usePanelStore.getState();
+      if (rejects) rejectResponse(new Error("Late transcription failure"));
+      else
+        resolveResponse({
+          videoId: active.video.videoId,
+          phase: "ready",
+          progress: 1,
+          transcript: active,
+        });
+      await pending;
+      expect(usePanelStore.getState().transcript).toEqual(saved);
+      expect(usePanelStore.getState().savedView).toBe(true);
+      expect(usePanelStore.getState().sttPhase).toBe(pinned.sttPhase);
+      expect(usePanelStore.getState().sttError).toBe(pinned.sttError);
+      if (pendingType === "stt.status")
+        expect(request.mock.calls.some(([type]) => type === "stt.start")).toBe(
+          false,
+        );
+    },
+  );
+
+  it("does not start transcription when a pending status request was cancelled", async () => {
+    const active = fixture();
+    let resolveStatus!: (value: unknown) => void;
+    const status = new Promise((resolve) => {
+      resolveStatus = resolve;
+    });
+    const request = vi
+      .spyOn(bus, "request")
+      .mockImplementation(async (type) => {
+        if (type === "stt.status") return status;
+        if (type === "stt.cancel") return { phase: "cancelled" };
+        throw new Error("Unexpected request: " + type);
+      });
+    usePanelStore.setState({
+      videoId: active.video.videoId,
+      transcript: null,
+      savedView: false,
+    });
+    const pending = usePanelStore.getState().startTranscription();
+    await usePanelStore.getState().cancelTranscription();
+    resolveStatus({ videoId: null, phase: "idle", progress: 0 });
+    await pending;
+    expect(usePanelStore.getState().sttPhase).toBe("cancelled");
+    expect(request.mock.calls.some(([type]) => type === "stt.start")).toBe(
+      false,
+    );
+  });
+
+  it("accepts a completed transcript while the live view is still current", async () => {
+    const active = fixture();
+    vi.spyOn(bus, "request").mockResolvedValue({
+      videoId: active.video.videoId,
+      phase: "ready",
+      progress: 1,
+      transcript: active,
+    });
+    usePanelStore.setState({
+      videoId: active.video.videoId,
+      transcript: null,
+      savedView: false,
+    });
+    await usePanelStore.getState().startTranscription();
+    expect(usePanelStore.getState().transcript).toEqual(active);
+    expect(usePanelStore.getState().sttPhase).toBe("ready");
+  });
+});

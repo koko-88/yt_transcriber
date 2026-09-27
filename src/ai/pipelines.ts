@@ -6,7 +6,7 @@ import { formatTimestamp } from "../core/export.js";
 import { bm25Retrieve } from "../core/search.js";
 import type { AiPipeline, ChatMessage } from "./types.js";
 
-export const PROMPT_VERSION = 3;
+export const PROMPT_VERSION = 4;
 
 /** Rough char budget for context (approx 4 chars/token, 16k tokens). */
 const MAX_CONTEXT_CHARS = 60_000;
@@ -114,32 +114,35 @@ const TS_RE = /\[(\d{1,2}:\d{2}(?::\d{2})?)\]/g;
 
 /**
  * Validate model-emitted [timestamps] against the transcript.
- * A citation is valid when some segment starts within `toleranceMs` of it
- * (or the timestamp falls inside a segment).
+ * By default, accept only the second-resolution anchors supplied to the model.
+ * Callers can explicitly request legacy proximity matching with a positive tolerance.
  */
 export function validateCitations(
   text: string,
   segments: readonly TranscriptSegment[],
-  toleranceMs = 15_000,
+  toleranceMs = 0,
 ): { text: string; valid: number[]; invalid: number[] } {
   const valid: number[] = [];
   const invalid: number[] = [];
-  if (segments.length === 0) {
-    return { text, valid, invalid };
-  }
-
-  const starts = segments.map((s) => s.startMs);
+  const anchors = new Set(
+    segments.map((segment) =>
+      parseTimestampToken(formatTimestamp(segment.startMs)),
+    ),
+  );
   const rewritten = text.replace(TS_RE, (full, inner: string) => {
     const ms = parseTimestampToken(inner);
     if (ms == null) {
       invalid.push(-1);
       return "[?]";
     }
-    const ok = starts.some(
-      (start, i) =>
-        Math.abs(start - ms) <= toleranceMs ||
-        (ms >= segments[i]!.startMs && ms < segments[i]!.endMs),
-    );
+    const ok =
+      anchors.has(ms) ||
+      (toleranceMs > 0 &&
+        segments.some(
+          (segment) =>
+            Math.abs(segment.startMs - ms) <= toleranceMs ||
+            (ms >= segment.startMs && ms < segment.endMs),
+        ));
     if (ok) {
       valid.push(ms);
       return full;

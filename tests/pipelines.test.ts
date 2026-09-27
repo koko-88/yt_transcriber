@@ -116,3 +116,38 @@ describe("parseTimestampToken", () => {
     expect(parseTimestampToken("[1:05:00]")).toBe(3_900_000);
   });
 });
+
+describe("source timestamp anchors", () => {
+  const segments = [
+    { index: 0, startMs: 5500, endMs: 8500, text: "First cue" },
+    { index: 1, startMs: 20750, endMs: 25000, text: "After a gap" },
+    { index: 2, startMs: 3600250, endMs: 3601500, text: "One hour" },
+  ];
+
+  it("retains the exact anchors supplied for fractional cue starts", () => {
+    const anchored = formatAnchoredSegments(segments);
+    expect(anchored).toContain("[0:05]");
+    expect(anchored).toContain("[0:20]");
+    expect(anchored).toContain("[1:00:00]");
+    const result = validateCitations(anchored, segments, 0);
+    expect(result.text).toBe(anchored);
+    expect(result.valid).toEqual([5000, 20000, 3600000]);
+    expect(result.invalid).toEqual([]);
+    expect(
+      groundAiOutput("chapters", anchored, { ...transcript, segments }),
+    ).toBe(anchored);
+  });
+
+  it("rejects invented timestamps even inside a cue or near an anchor", () => {
+    const result = validateCitations("[0:04] [0:06] [0:19] [0:21]", segments);
+    expect(result.text).toBe("[?] [?] [?] [?]");
+    expect(result.valid).toEqual([]);
+    expect(result.invalid).toEqual([4000, 6000, 19000, 21000]);
+  });
+
+  it("does not validate citations when no source anchors exist", () => {
+    expect(validateCitations("Unsupported [0:05]", []).text).toBe(
+      "Unsupported [?]",
+    );
+  });
+});
