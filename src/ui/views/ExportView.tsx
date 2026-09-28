@@ -38,7 +38,9 @@ export function ExportView({
           transcript={transcript}
           viewMode={s.viewMode}
           tr={s.tr}
-          canSave={!s.recents.some((item) => item.transcriptId === transcript.id)}
+          canSave={
+            !s.recents.some((item) => item.transcriptId === transcript.id)
+          }
           onSave={() => void s.saveCurrentToLibrary()}
           onAddNote={() => onNavigate("notes")}
         />

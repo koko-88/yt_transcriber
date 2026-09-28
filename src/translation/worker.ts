@@ -55,7 +55,9 @@ self.onmessage = async (
     const inputs = message.texts.map((text) => text.trim());
     const raw = await translate(inputs);
     const rows = Array.isArray(raw) ? raw : [raw];
-    const texts = inputs.map((source, index) => outputText(rows[index]) || source);
+    const texts = inputs.map(
+      (source, index) => outputText(rows[index]) || source,
+    );
     self.postMessage({ type: "translated", texts });
   } catch (error) {
     self.postMessage({

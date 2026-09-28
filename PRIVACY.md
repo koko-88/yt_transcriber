@@ -11,14 +11,14 @@ provider by this product.
 
 ## What is stored, and where
 
-| Data                                                                      | Where                                                         | Why                                                  | Leaves your device?                       |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------- |
-| Settings (theme and language)                                             | `browser.storage.local`                                       | Remember your preferences                            | No                                        |
-| Saved transcripts and video metadata                                      | IndexedDB (`yt-transcript-workbench`) in the extension origin | Library and exports                                  | No                                        |
-| Notes and highlights                                                      | IndexedDB                                                     | Timestamp-linked annotations                         | No (local backup export only)             |
-| Recognition/translation results                                           | IndexedDB                                                     | Reuse locally generated Arabic/English tracks        | No                                        |
-| Diagnostics log (in-memory ring buffer, last 500 events; values redacted) | Memory of the panel/background                                | Troubleshooting; copied only if you press the button | No                                        |
-| Playback position polling                                                 | Not stored                                                    | Follow-along highlighting                            | No                                        |
+| Data                                                                      | Where                                                         | Why                                                  | Leaves your device?           |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------- |
+| Settings (theme and language)                                             | `browser.storage.local`                                       | Remember your preferences                            | No                            |
+| Saved transcripts and video metadata                                      | IndexedDB (`yt-transcript-workbench`) in the extension origin | Library and exports                                  | No                            |
+| Notes and highlights                                                      | IndexedDB                                                     | Timestamp-linked annotations                         | No (local backup export only) |
+| Recognition/translation results                                           | IndexedDB                                                     | Reuse locally generated Arabic/English tracks        | No                            |
+| Diagnostics log (in-memory ring buffer, last 500 events; values redacted) | Memory of the panel/background                                | Troubleshooting; copied only if you press the button | No                            |
+| Playback position polling                                                 | Not stored                                                    | Follow-along highlighting                            | No                            |
 
 No browsing history, no keystrokes, no analytics, no crash reporting, no
 remote configuration and no product API keys are collected.

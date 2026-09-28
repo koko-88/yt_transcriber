@@ -23,7 +23,7 @@ The extension runs in four contexts with different trust levels:
 | ----------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------- |
 | MAIN-world bridge (`youtube-bridge.content.ts`) | **Untrusted** (page JavaScript runs here) | Read player state, toggle captions, observe the player's own `timedtext` traffic |
 | ISOLATED content script (`youtube.content.ts`)  | Trusted                                   | Validate bridge payloads, fetch same-origin captions, talk to background         |
-| Background service worker                       | Most trusted                              | Permissions, media/session routing and storage                                    |
+| Background service worker                       | Most trusted                              | Permissions, media/session routing and storage                                   |
 | Side panel (extension page)                     | Trusted                                   | UI only; privileged work is requested over the message bus                       |
 
 ### Assets and how they are protected
@@ -51,16 +51,16 @@ The extension runs in four contexts with different trust levels:
 
 ### Permissions rationale
 
-| Permission                         | Why it is needed                                                                                         |
-| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `storage`                          | Save settings and the local workspace                                                                    |
-| `unlimitedStorage`                 | Long transcripts, generated tracks and libraries can exceed default extension storage quotas             |
-| `sidePanel` (Chromium only)        | Opens the workbench in the browser's side panel                                                          |
-| `offscreen` (Chromium only)        | Hosts cancellable local speech/translation workers independently of the visible panel                    |
-| `webRequest` (Chromium only)       | Passively observes the active video's already-resolved media request for the no-caption local path       |
-| `https://www.youtube.com/*`        | Content scripts and caption acquisition on video pages                                                   |
-| `https://*.googlevideo.com/*`      | Bounded media reads for local no-caption transcription                                                   |
-| Hugging Face model hosts           | On-demand local model/tokenizer downloads                                                                |
+| Permission                    | Why it is needed                                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| `storage`                     | Save settings and the local workspace                                                              |
+| `unlimitedStorage`            | Long transcripts, generated tracks and libraries can exceed default extension storage quotas       |
+| `sidePanel` (Chromium only)   | Opens the workbench in the browser's side panel                                                    |
+| `offscreen` (Chromium only)   | Hosts cancellable local speech/translation workers independently of the visible panel              |
+| `webRequest` (Chromium only)  | Passively observes the active video's already-resolved media request for the no-caption local path |
+| `https://www.youtube.com/*`   | Content scripts and caption acquisition on video pages                                             |
+| `https://*.googlevideo.com/*` | Bounded media reads for local no-caption transcription                                             |
+| Hugging Face model hosts      | On-demand local model/tokenizer downloads                                                          |
 
 The extension does **not** request `scripting`, `history`, `cookies`,
 `<all_urls>`, remote AI-provider origins, `web_accessible_resources` or

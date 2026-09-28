@@ -44,7 +44,11 @@ const english: Transcript = {
 
 describe("buildArabicTranscript", () => {
   it("preserves timing and creates an Arabic translated track", () => {
-    const result = buildArabicTranscript(english, ["مرحبا بالعالم", "السطر الثاني"], 3);
+    const result = buildArabicTranscript(
+      english,
+      ["مرحبا بالعالم", "السطر الثاني"],
+      3,
+    );
     expect(result.id).toBe(`youtube:dQw4w9WgXcQ:${LOCAL_ARABIC_TRACK_ID}`);
     expect(result.track).toMatchObject({
       trackId: LOCAL_ARABIC_TRACK_ID,
@@ -53,7 +57,9 @@ describe("buildArabicTranscript", () => {
       translatedFrom: "en",
     });
     expect(result.source.method).toBe("local-translation");
-    expect(result.segments.map((segment) => [segment.startMs, segment.endMs])).toEqual([
+    expect(
+      result.segments.map((segment) => [segment.startMs, segment.endMs]),
+    ).toEqual([
       [1000, 2500],
       [2600, 4000],
     ]);

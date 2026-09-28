@@ -67,12 +67,7 @@ interface PanelState {
   playbackMs: number;
   playing: boolean;
   sttPhase:
-    | "idle"
-    | "preparing"
-    | "transcribing"
-    | "ready"
-    | "error"
-    | "cancelled";
+    "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
   sttProgress: number;
   sttError: string | null;
   sttPreview: TranscriptSegment[];
@@ -450,7 +445,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         if (epoch === acquireEpoch)
           set({
             actionError:
-              error instanceof Error ? error.message : get().tr("general.error"),
+              error instanceof Error
+                ? error.message
+                : get().tr("general.error"),
           });
       } finally {
         if (epoch === acquireEpoch) set({ loading: false });

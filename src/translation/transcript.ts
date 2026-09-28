@@ -19,12 +19,16 @@ export function buildArabicTranscript(
   acquiredAt = Date.now(),
 ): Transcript {
   if (translatedTexts.length !== english.segments.length) {
-    throw new Error("translated segment count does not match source transcript");
+    throw new Error(
+      "translated segment count does not match source transcript",
+    );
   }
-  const segments: TranscriptSegment[] = english.segments.map((segment, index) => ({
-    ...segment,
-    text: translatedTexts[index]?.trim() || segment.text,
-  }));
+  const segments: TranscriptSegment[] = english.segments.map(
+    (segment, index) => ({
+      ...segment,
+      text: translatedTexts[index]?.trim() || segment.text,
+    }),
+  );
   const arabicTrack = generatedLocalTracks().find(
     (track) => track.trackId === LOCAL_ARABIC_TRACK_ID,
   );

@@ -92,7 +92,8 @@ export function App() {
                 if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
                 e.preventDefault();
                 const idx = TABS.indexOf(id);
-                const direction = document.documentElement.dir === "rtl" ? -1 : 1;
+                const direction =
+                  document.documentElement.dir === "rtl" ? -1 : 1;
                 let next = idx;
                 for (let attempts = 0; attempts < TABS.length; attempts++) {
                   next =

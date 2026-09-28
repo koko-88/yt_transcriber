@@ -44,7 +44,9 @@ function withTranslationTarget(baseUrl: string, target: string): string | null {
  * translatable, synthesize the missing counterpart by adding `tlang=` to that
  * source track URL. No remote AI provider is involved.
  */
-export function buildTrackEntries(bridgeTracks: readonly BridgeTrack[]): TrackEntry[] {
+export function buildTrackEntries(
+  bridgeTracks: readonly BridgeTrack[],
+): TrackEntry[] {
   const seen = new Set<string>();
   const entries: TrackEntry[] = [];
   const sourceEntries: { entry: TrackEntry; raw: BridgeTrack }[] = [];
@@ -91,7 +93,9 @@ export function buildTrackEntries(bridgeTracks: readonly BridgeTrack[]): TrackEn
   ] as const;
 
   for (const target of targets) {
-    if (entries.some((e) => languageMatches(e.track.languageCode, target.code))) {
+    if (
+      entries.some((e) => languageMatches(e.track.languageCode, target.code))
+    ) {
       continue;
     }
 

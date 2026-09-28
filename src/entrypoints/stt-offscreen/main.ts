@@ -28,12 +28,7 @@ import {
 import { buildArabicTranscript } from "../../translation/transcript.js";
 
 type Phase =
-  | "idle"
-  | "preparing"
-  | "transcribing"
-  | "ready"
-  | "error"
-  | "cancelled";
+  "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
 interface Status {
   videoId: string | null;
   phase: Phase;
@@ -134,12 +129,9 @@ async function translateEnglishToArabic(
     new URL("../../translation/worker.ts", import.meta.url),
     { type: "module" },
   );
-  const init = await waitOnWorker(
-    translationWorker,
-    { type: "init" },
-    signal,
-  );
-  if (init.type !== "ready") throw new Error("Arabic translation model did not initialize");
+  const init = await waitOnWorker(translationWorker, { type: "init" }, signal);
+  if (init.type !== "ready")
+    throw new Error("Arabic translation model did not initialize");
 
   const translatedTexts: string[] = new Array(english.segments.length);
   const batchSize = 8;
@@ -157,7 +149,9 @@ async function translateEnglishToArabic(
       ? result.texts.map((text) => String(text))
       : [];
     if (texts.length !== batch.length) {
-      throw new Error("Arabic translation returned an unexpected segment count");
+      throw new Error(
+        "Arabic translation returned an unexpected segment count",
+      );
     }
     for (let index = 0; index < texts.length; index++) {
       translatedTexts[start + index] = texts[index]!;
@@ -170,7 +164,8 @@ async function translateEnglishToArabic(
       tracks: [english.track],
       progress: Math.min(
         0.995,
-        0.95 + 0.045 * Math.min(1, (start + batch.length) / english.segments.length),
+        0.95 +
+          0.045 * Math.min(1, (start + batch.length) / english.segments.length),
       ),
     });
   }
@@ -277,7 +272,8 @@ async function run(
     }
     if (signal.aborted || generation !== jobGeneration) return;
     const segments = normalizer.finish();
-    if (!segments.length) throw new Error("Speech model returned no transcript");
+    if (!segments.length)
+      throw new Error("Speech model returned no transcript");
     if (
       source.tabId == null ||
       !(await browser.runtime.sendMessage({

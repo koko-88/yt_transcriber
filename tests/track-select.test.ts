@@ -67,8 +67,7 @@ describe("buildTrackEntries", () => {
       track({
         languageCode: "en",
         label: "English",
-        baseUrl:
-          "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&lang=en",
+        baseUrl: "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&lang=en",
       }),
     ]);
     expect(

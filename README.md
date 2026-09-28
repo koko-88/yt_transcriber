@@ -21,14 +21,14 @@ for the threat model, and [PRIVACY.md](PRIVACY.md) for exactly what is stored.
 
 ## Features
 
-| Area                | What you get                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| Transcript          | Paragraph/segment views, follow playback, video-bound timestamp actions, Arabic/English track switching                   |
-| Corrections         | Segment editing, separate original/corrected versions, persisted undo for the last 100 edits; export the displayed version |
-| Search              | Arabic-aware transcript search; full-text saved-library search and language filtering                                      |
-| Library             | Saved transcripts and language tracks, paginated display, local backup/import                                              |
-| Notes               | Timestamp-linked creation, viewing, editing, deletion and Markdown export                                                  |
-| Export + Actions    | Copy modes; TXT, Markdown, SRT, VTT, JSON, CSV, DOCX, PDF and PPTX; built-in document templates                            |
+| Area                | What you get                                                                                                                 |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| Transcript          | Paragraph/segment views, follow playback, video-bound timestamp actions, Arabic/English track switching                      |
+| Corrections         | Segment editing, separate original/corrected versions, persisted undo for the last 100 edits; export the displayed version   |
+| Search              | Arabic-aware transcript search; full-text saved-library search and language filtering                                        |
+| Library             | Saved transcripts and language tracks, paginated display, local backup/import                                                |
+| Notes               | Timestamp-linked creation, viewing, editing, deletion and Markdown export                                                    |
+| Export + Actions    | Copy modes; TXT, Markdown, SRT, VTT, JSON, CSV, DOCX, PDF and PPTX; built-in document templates                              |
 | Local transcription | Full-audio Chromium pipeline with bounded decoding, partial previews, checkpoints, English pivot and local Arabic generation |
 
 ## Requirements
