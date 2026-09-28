@@ -1,0 +1,198 @@
+/* Compact, reader-first side-panel layout.
+ * Keep the transcript viewport usable even when metadata and controls are dense.
+ */
+
+html,
+body,
+#root {
+  min-inline-size: 0;
+}
+
+.app-header {
+  min-block-size: 48px;
+  padding: var(--core-space-8) var(--core-space-12);
+}
+
+.app-mark {
+  inline-size: 28px;
+  block-size: 28px;
+}
+
+.tabbar {
+  flex: none;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+}
+
+.tabbar button {
+  flex: 1 0 64px;
+  min-block-size: 38px;
+  padding: var(--core-space-6) var(--core-space-8);
+}
+
+.panel {
+  min-block-size: 0;
+  overflow: hidden;
+}
+
+.transcript-view {
+  min-block-size: 0;
+}
+
+.transcript-view > .toolbar:first-child {
+  flex: none;
+  padding: var(--core-space-8) var(--core-space-12) 0;
+}
+
+.transcript-view > .toolbar:first-child .btn {
+  min-block-size: 32px;
+  padding-block: var(--core-space-4);
+}
+
+.transcript-view > .transcript-editor {
+  flex: none;
+  margin: var(--core-space-8) var(--core-space-12) 0;
+  padding: var(--core-space-8) var(--core-space-10);
+}
+
+.transcript-view > .transcript-editor[open] {
+  max-block-size: 34%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.transcript-view .transcript-head {
+  flex: 0 1 auto;
+  min-block-size: 0;
+  max-block-size: 46%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  gap: var(--core-space-8);
+  padding: var(--core-space-10) var(--core-space-12) var(--core-space-8);
+}
+
+.transcript-view .meta h2 {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.transcript-view .transcript-search input,
+.transcript-view .transcript-controls > select,
+.transcript-view .transcript-controls > .btn,
+.transcript-view .action-trigger {
+  min-block-size: 34px;
+  block-size: 34px;
+}
+
+.transcript-view .transcript-controls {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: thin;
+  padding-block-end: 2px;
+}
+
+.transcript-view .transcript-controls > select {
+  flex: 1 1 150px;
+  min-inline-size: 130px;
+  max-inline-size: 260px;
+}
+
+.transcript-view .transcript-controls .btn {
+  padding: var(--core-space-4) var(--core-space-8);
+}
+
+.transcript-view .view-toggle {
+  flex: none;
+}
+
+.transcript-view .view-toggle .btn {
+  min-block-size: 28px;
+  block-size: 28px;
+}
+
+/* Export has its own top-level tab now; keep only the compact Actions trigger
+ * in the transcript toolbar. Export remains reachable from Actions as a fallback.
+ */
+.transcript-view .action-menu > .action-trigger:first-child {
+  display: none;
+}
+
+.transcript-summary {
+  flex: none;
+  padding-block: var(--core-space-6);
+}
+
+.transcript-scroll {
+  flex: 1 1 180px;
+  min-block-size: 140px;
+  overscroll-behavior: contain;
+}
+
+.export-view {
+  overflow-y: auto;
+}
+
+.export-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--core-space-8);
+}
+
+.export-view .action-menu {
+  inline-size: 100%;
+}
+
+.export-view .action-menu > .action-trigger:first-child {
+  inline-size: 100%;
+  min-block-size: 44px;
+  background: var(--ui-accent);
+  border-color: var(--ui-accent);
+  color: var(--ui-on-accent);
+}
+
+.export-view .action-menu > .action-trigger:last-of-type {
+  display: none;
+}
+
+.export-view .action-popover {
+  position: static;
+  inline-size: 100%;
+  max-block-size: none;
+  margin-block-start: var(--core-space-8);
+  box-shadow: none;
+}
+
+@media (max-height: 620px) {
+  .app-header {
+    min-block-size: 42px;
+    padding-block: var(--core-space-6);
+  }
+
+  .app-subtitle {
+    display: none;
+  }
+
+  .tabbar button {
+    min-block-size: 34px;
+    padding-block: var(--core-space-4);
+  }
+
+  .transcript-view > .transcript-editor {
+    margin-block-start: var(--core-space-6);
+  }
+
+  .transcript-view .transcript-head {
+    max-block-size: 42%;
+    padding-block: var(--core-space-8) var(--core-space-6);
+  }
+
+  .transcript-scroll {
+    min-block-size: 120px;
+  }
+}

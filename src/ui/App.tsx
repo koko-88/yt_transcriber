@@ -1,14 +1,23 @@
 // Panel root: tab bar + active view.
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { usePanelStore } from "./store.js";
 import { TranscriptView } from "./views/TranscriptView.js";
+import { ExportView } from "./views/ExportView.js";
 import { LibraryView } from "./views/LibraryView.js";
 import { AiView } from "./views/AiView.js";
 import { NotesView } from "./views/NotesView.js";
 import { SettingsView } from "./views/SettingsView.js";
 
-const TABS = ["transcript", "library", "notes", "ai", "settings"] as const;
+const TABS = [
+  "transcript",
+  "export",
+  "library",
+  "notes",
+  "ai",
+  "settings",
+] as const;
+type AppTab = (typeof TABS)[number];
 
 export function App() {
   const transcriptId = usePanelStore((s) => s.transcript?.id);
@@ -19,6 +28,8 @@ export function App() {
   const tr = usePanelStore((s) => s.tr);
   const theme = usePanelStore((s) => s.settings.theme);
   const init = usePanelStore((s) => s.init);
+  const [utilityTab, setUtilityTab] = useState<"export" | null>(null);
+  const activeTab: AppTab = utilityTab ?? tab;
 
   useEffect(() => {
     void init();
@@ -31,6 +42,15 @@ export function App() {
       document.documentElement.dataset.theme = theme;
     }
   }, [theme]);
+
+  const activateTab = (id: AppTab) => {
+    if (id === "export") {
+      setUtilityTab("export");
+      return;
+    }
+    setUtilityTab(null);
+    setTab(id);
+  };
 
   if (!ready) {
     return (
@@ -62,51 +82,64 @@ export function App() {
         </p>
       )}
       <nav className="tabbar" role="tablist" aria-label={tr("app.name")}>
-        {TABS.map((id) => (
-          <button
-            key={id}
-            id={`tab-${id}`}
-            role="tab"
-            type="button"
-            aria-selected={tab === id}
-            aria-controls={`panel-${id}`}
-            tabIndex={tab === id ? 0 : -1}
-            onKeyDown={(e) => {
-              if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
-              e.preventDefault();
-              const idx = TABS.indexOf(id);
-              const direction = document.documentElement.dir === "rtl" ? -1 : 1;
-              const next =
-                e.key === "ArrowRight"
-                  ? (idx + direction + TABS.length) % TABS.length
-                  : (idx - direction + TABS.length) % TABS.length;
-              const nextId = TABS[next];
-              if (!nextId) return;
-              setTab(nextId);
-              document.getElementById(`tab-${nextId}`)?.focus();
-            }}
-            onClick={() => setTab(id)}
-          >
-            {tr(`nav.${id}` as "nav.transcript")}
-          </button>
-        ))}
+        {TABS.map((id) => {
+          const disabled = id === "export" && !transcriptId;
+          return (
+            <button
+              key={id}
+              id={`tab-${id}`}
+              role="tab"
+              type="button"
+              aria-selected={activeTab === id}
+              aria-controls={`panel-${id}`}
+              aria-disabled={disabled || undefined}
+              disabled={disabled}
+              tabIndex={activeTab === id ? 0 : -1}
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                e.preventDefault();
+                const idx = TABS.indexOf(id);
+                const direction = document.documentElement.dir === "rtl" ? -1 : 1;
+                let next = idx;
+                for (let attempts = 0; attempts < TABS.length; attempts++) {
+                  next =
+                    e.key === "ArrowRight"
+                      ? (next + direction + TABS.length) % TABS.length
+                      : (next - direction + TABS.length) % TABS.length;
+                  const nextId = TABS[next];
+                  if (!nextId) return;
+                  if (nextId === "export" && !transcriptId) continue;
+                  activateTab(nextId);
+                  document.getElementById(`tab-${nextId}`)?.focus();
+                  return;
+                }
+              }}
+              onClick={() => activateTab(id)}
+            >
+              {id === "export"
+                ? tr("transcript.export")
+                : tr(`nav.${id}` as "nav.transcript")}
+            </button>
+          );
+        })}
       </nav>
       <div
-        id={`panel-${tab}`}
+        id={`panel-${activeTab}`}
         role="tabpanel"
-        aria-labelledby={`tab-${tab}`}
+        aria-labelledby={`tab-${activeTab}`}
         tabIndex={0}
         className="panel"
       >
-        {tab === "transcript" && <TranscriptView />}
-        {tab === "library" && <LibraryView />}
-        <div className="workspace-pane" hidden={tab !== "ai"}>
+        {activeTab === "transcript" && <TranscriptView />}
+        {activeTab === "export" && <ExportView />}
+        {activeTab === "library" && <LibraryView />}
+        <div className="workspace-pane" hidden={activeTab !== "ai"}>
           <AiView />
         </div>
-        <div className="workspace-pane" hidden={tab !== "notes"}>
+        <div className="workspace-pane" hidden={activeTab !== "notes"}>
           <NotesView key={transcriptId} />
         </div>
-        {tab === "settings" && <SettingsView />}
+        {activeTab === "settings" && <SettingsView />}
       </div>
     </div>
   );
