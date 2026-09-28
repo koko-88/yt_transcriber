@@ -41,7 +41,14 @@ export function LibraryView() {
   ].sort();
   return (
     <div className="view">
-      <h2>{tr("nav.library")}</h2>
+      <div className="workspace-view-heading">
+        <h2>{tr("nav.library")}</h2>
+        <span className="count-pill" role="status">
+          {busy
+            ? tr("general.loading")
+            : tr("workspace.savedCount", { count: items.length })}
+        </span>
+      </div>
       <input
         type="search"
         maxLength={1000}
@@ -61,11 +68,6 @@ export function LibraryView() {
           ))}
         </select>
       </label>
-      <p role="status">
-        {busy
-          ? tr("general.loading")
-          : tr("workspace.savedCount", { count: items.length })}
-      </p>
       {error && <p role="alert">{error}</p>}
       {!busy && !items.length && !query && !language && (
         <div className="banner">
@@ -86,17 +88,21 @@ export function LibraryView() {
                 .catch(() => setError(tr("general.error")))
             }
           >
-            <span>
-              <strong>{item.title}</strong>
-              <span className="hint">
-                {item.channelName} · {item.languageCode} ·{" "}
-                {tr("transcript.segments", { count: item.segmentCount })}
+            <span className="library-copy">
+              <strong className="library-title">{item.title}</strong>
+              <span className="library-meta">
+                {item.channelName && <span>{item.channelName}</span>}
+                <span className="language-pill">{item.languageCode}</span>
+                <span>
+                  {tr("transcript.segments", { count: item.segmentCount })}
+                </span>
               </span>
             </span>
           </button>
           <button
-            className="btn"
-            aria-label={tr("library.unsave")}
+            className="btn icon-button"
+            aria-label={`${tr("library.unsave")}: ${item.title}`}
+            title={`${tr("library.unsave")}: ${item.title}`}
             onClick={() => {
               if (window.confirm(tr("workspace.deleteSaved")))
                 void s
@@ -104,7 +110,17 @@ export function LibraryView() {
                   .catch(() => setError(tr("general.error")));
             }}
           >
-            ×
+            <svg
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 7h16M10 4h4m-8 3 1 13h10l1-13M10 11v6m4-6v6" />
+            </svg>
           </button>
         </div>
       ))}

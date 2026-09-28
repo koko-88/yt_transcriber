@@ -34,14 +34,15 @@ export function AiHistory({ revision }: { revision: number }) {
   }, [videoId, revision, tr]);
   const entry = entries.find((item) => item.id === selected);
   return (
-    <section className="workspace-card">
-      <h3>{tr("workspace.history")}</h3>
+    <section className="workspace-card ai-history">
+      <h3 className="section-title">{tr("workspace.history")}</h3>
       {error && <p role="alert">{error}</p>}
       {!entries.length ? (
         <p>{tr("workspace.historyEmpty")}</p>
       ) : (
         <>
           <select
+            className="history-select"
             aria-label={tr("workspace.history")}
             value={selected}
             onChange={(e) => setSelected(e.target.value)}

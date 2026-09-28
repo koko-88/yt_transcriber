@@ -56,7 +56,9 @@ export function SettingsView() {
 
   return (
     <div className="view">
-      <h2 style={{ margin: 0, fontSize: 15 }}>{s.tr("settings.title")}</h2>
+      <div className="workspace-view-heading">
+        <h2>{s.tr("settings.title")}</h2>
+      </div>
 
       <div className="settings-row">
         <label htmlFor="set-theme">{s.tr("settings.theme")}</label>

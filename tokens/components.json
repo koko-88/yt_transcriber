@@ -5,7 +5,7 @@
       "contentInset": { "$type": "dimension", "$value": "{core.space.16}" }
     },
     "control": {
-      "height": { "$type": "dimension", "$value": "36px" },
+      "height": { "$type": "dimension", "$value": "40px" },
       "radius": { "$type": "dimension", "$value": "{core.radius.md}" }
     },
     "transcript": {

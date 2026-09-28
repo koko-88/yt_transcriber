@@ -71,12 +71,16 @@ export function NotesView() {
   };
   return (
     <div className="view">
-      <h2>{tr("nav.notes")}</h2>
-      <p className="hint">{transcript.video.title}</p>
+      <div className="workspace-view-heading">
+        <div>
+          <h2>{tr("nav.notes")}</h2>
+          <p className="workspace-subtitle">{transcript.video.title}</p>
+        </div>
+      </div>
       {error && <p role="alert">{error}</p>}
       {!notes.length && <p>{tr("workspace.notesEmpty")}</p>}
       {notes.map((note) => (
-        <article className="workspace-card" key={note.id}>
+        <article className="workspace-card note-card" key={note.id}>
           {note.startMs != null && (
             <button
               className="text-action"
@@ -85,7 +89,7 @@ export function NotesView() {
               {formatTimestamp(note.startMs)}
             </button>
           )}
-          <p className="preserve-text">{note.text}</p>
+          <p className="preserve-text note-content">{note.text}</p>
           <div className="toolbar">
             <button
               className="btn"
@@ -121,12 +125,13 @@ export function NotesView() {
         </article>
       ))}
       <form
-        className="workspace-card"
+        className="workspace-card note-editor"
         onSubmit={(e) => {
           e.preventDefault();
           void save();
         }}
       >
+        <h3>{tr(editing ? "workspace.edit" : "workspace.noteAdd")}</h3>
         <label>
           {tr("workspace.noteText")}
           <textarea

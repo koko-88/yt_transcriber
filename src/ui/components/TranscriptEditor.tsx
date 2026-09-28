@@ -77,7 +77,7 @@ export function TranscriptEditor() {
     }
   };
   return (
-    <details className="workspace-card">
+    <details className="workspace-card transcript-editor">
       <summary>{s.tr("workspace.corrections")}</summary>
       <p className="hint">{s.tr("workspace.editHint")}</p>
       {error && <p role="alert">{error}</p>}
