@@ -8,7 +8,7 @@ export default defineConfig({
     const base = {
       name: "Transcript Workbench for YouTube",
       description:
-        "Private transcript workspace for YouTube. Your data stays local, your AI is your choice.",
+        "Private local-first transcript workspace for YouTube with bilingual Arabic/English transcript support.",
       version: "1.0.0",
       action: {
         default_title: "Transcript Workbench",
@@ -33,15 +33,7 @@ export default defineConfig({
         "https://*.hf.co/*",
         "https://*.xethub.hf.co/*",
       ],
-      optional_host_permissions: [
-        "https://api.openai.com/*",
-        "https://openrouter.ai/*",
-        "https://api.groq.com/*",
-        "https://api.mistral.ai/*",
-        "https://generativelanguage.googleapis.com/*",
-        "http://localhost/*",
-        "http://127.0.0.1/*",
-      ],
+      optional_host_permissions: [] as string[],
       commands: {
         _execute_action: {
           suggested_key: {
@@ -54,7 +46,7 @@ export default defineConfig({
         extension_pages: [
           "script-src 'self' 'wasm-unsafe-eval'",
           "object-src 'self'",
-          `connect-src 'self' https://*.googlevideo.com https://huggingface.co https://*.hf.co https://*.xethub.hf.co https://api.openai.com https://openrouter.ai https://api.groq.com https://api.mistral.ai https://generativelanguage.googleapis.com http://localhost:* http://127.0.0.1:*`,
+          `connect-src 'self' https://*.googlevideo.com https://huggingface.co https://*.hf.co https://*.xethub.hf.co`,
         ].join("; "),
       },
     };
@@ -65,22 +57,15 @@ export default defineConfig({
         permissions: base.permissions.filter(
           (p) => p !== "sidePanel" && p !== "offscreen",
         ),
-        // MV2 has no optional_host_permissions key; optional host patterns
-        // must be listed under optional_permissions instead.
-        optional_permissions: base.optional_host_permissions,
+        // MV2 has no optional_host_permissions key; no optional network origins
+        // are required now that remote AI providers are not part of the product.
+        optional_permissions: [] as string[],
         browser_specific_settings: {
           gecko: {
             id: "transcript-workbench@yt-transcriber",
             strict_min_version: "142.0",
-            // Core product transmits nothing by default (required: none).
-            // Optional AI may send transcript text to a user-chosen provider
-            // (optional: websiteContent), requested via permissions.request
-            // when Firefox exposes data_collection consent. web-ext requires
-            // the `required` key; none+optional is the AMO-valid shape for
-            // opt-in transmission (see Extension Workshop + addons-linter).
             data_collection_permissions: {
               required: ["none"],
-              optional: ["websiteContent"],
             },
           },
         },

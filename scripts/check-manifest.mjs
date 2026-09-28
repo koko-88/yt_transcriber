@@ -40,7 +40,7 @@ const ALLOWED_HOSTS = [
   "https://*.hf.co/*",
   "https://*.xethub.hf.co/*",
 ];
-const PROVIDER_ORIGINS = [
+const REMOTE_AI_ORIGINS = [
   "https://api.openai.com/*",
   "https://openrouter.ai/*",
   "https://api.groq.com/*",
@@ -86,13 +86,8 @@ for (const [browserName, rel] of [
   const ffOptional = m.optional_permissions ?? [];
   const allOptional = [...optional, ...ffOptional];
   check(
-    `${browserName}: AI provider origins only optional`,
-    allOptional.every((o) => PROVIDER_ORIGINS.includes(o)),
-    JSON.stringify(allOptional),
-  );
-  check(
-    `${browserName}: AI provider origins requestable`,
-    PROVIDER_ORIGINS.every((o) => allOptional.includes(o)),
+    `${browserName}: no remote AI provider origins`,
+    !allOptional.some((o) => REMOTE_AI_ORIGINS.includes(o)),
     JSON.stringify(allOptional),
   );
   const csp =
@@ -106,6 +101,13 @@ for (const [browserName, rel] of [
   check(
     `${browserName}: CSP no remote script`,
     !/script-src[^;]*https?:/.test(csp),
+  );
+  check(
+    `${browserName}: CSP has no remote AI provider origins`,
+    !REMOTE_AI_ORIGINS.some((origin) =>
+      csp.includes(origin.replace(/\/\*$/, "")),
+    ),
+    csp,
   );
 
   if (browserName === "firefox") {
@@ -128,8 +130,8 @@ for (const [browserName, rel] of [
       JSON.stringify(dcp),
     );
     check(
-      `${browserName}: optional websiteContent for AI`,
-      Array.isArray(dcp?.optional) && dcp.optional.includes("websiteContent"),
+      `${browserName}: no optional website-content transmission`,
+      !Array.isArray(dcp?.optional) || dcp.optional.length === 0,
       JSON.stringify(dcp),
     );
   }

@@ -17,6 +17,10 @@ import { DEFAULT_SETTINGS } from "../storage/settings.js";
 import type { Locale, MessageKey } from "../core/i18n.js";
 import { t as translate } from "../core/i18n.js";
 import type { PanelContext } from "../platform/tab-context.js";
+import {
+  LOCAL_ARABIC_TRACK_ID,
+  LOCAL_ENGLISH_TRACK_ID,
+} from "../stt/model-profile.js";
 
 export type PanelTab = "transcript" | "library" | "notes" | "ai" | "settings";
 export type ViewMode = "paragraph" | "raw";
@@ -45,7 +49,6 @@ interface PanelState {
   settings: AppSettings;
   locale: Locale;
 
-  // current YouTube page
   videoId: string | null;
   shellStatus: ShellStatus;
   availability: Availability;
@@ -57,7 +60,6 @@ interface PanelState {
   openSource(timeMs?: number): Promise<void>;
   returnToVideo(): Promise<void>;
 
-  // transcript view
   transcript: Transcript | null;
   loading: boolean;
   viewMode: ViewMode;
@@ -65,18 +67,21 @@ interface PanelState {
   playbackMs: number;
   playing: boolean;
   sttPhase:
-    "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
+    | "idle"
+    | "preparing"
+    | "transcribing"
+    | "ready"
+    | "error"
+    | "cancelled";
   sttProgress: number;
   sttError: string | null;
   sttPreview: TranscriptSegment[];
   sttCheckpoint: boolean;
   searchQuery: string;
 
-  // library
   recents: LibraryItem[];
   savedVideoIds: Set<string>;
 
-  // actions
   init(): Promise<void>;
   setTab(tab: PanelTab): void;
   setViewMode(mode: ViewMode): void;
@@ -103,6 +108,12 @@ function resolveLocale(setting: AppSettings["locale"]): Locale {
   return navigator.language.toLowerCase().startsWith("ar") ? "ar" : "en";
 }
 
+function isLocalGeneratedTrack(trackId: string | undefined): boolean {
+  return (
+    trackId === LOCAL_ENGLISH_TRACK_ID || trackId === LOCAL_ARABIC_TRACK_ID
+  );
+}
+
 let playbackPort: ReturnType<typeof browser.tabs.connect> | null = null;
 let pageEpoch = 0;
 let acquireEpoch = 0;
@@ -112,9 +123,7 @@ let refreshRetryCount = 0;
 const PLAYBACK_POLL_FOLLOW_MS = 100;
 const PLAYBACK_POLL_IDLE_MS = 1000;
 
-/** Follow-mode poll interval (ms). Exported for regression tests. */
 export const FOLLOW_PLAYBACK_POLL_MS = PLAYBACK_POLL_FOLLOW_MS;
-/** Idle / paused poll interval (ms). */
 export const IDLE_PLAYBACK_POLL_MS = PLAYBACK_POLL_IDLE_MS;
 
 async function startPlaybackStream(
@@ -211,7 +220,6 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     await get().refreshPageState();
     await get().loadLibrary();
 
-    // Listen for navigation notifications relayed by the background.
     browser.runtime.onMessage.addListener((raw) => {
       const msg = raw as {
         type?: string;
@@ -244,6 +252,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           metadata: null,
           availability: "unsupported-page-structure",
           loading: false,
+          actionError: null,
           sttPhase: "idle",
           sttProgress: 0,
           sttError: null,
@@ -258,7 +267,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           phase?: PanelState["sttPhase"];
           progress?: number;
           error?: string;
+          translationError?: string;
           transcript?: unknown;
+          tracks?: TranscriptTrack[];
           partialSegments?: TranscriptSegment[];
           checkpointAvailable?: boolean;
         };
@@ -272,6 +283,10 @@ export const usePanelStore = create<PanelState>((set, get) => ({
           sttError: update.error ?? null,
           sttPreview: update.partialSegments ?? get().sttPreview,
           sttCheckpoint: update.checkpointAvailable ?? false,
+          ...(update.tracks ? { tracks: [...update.tracks] } : {}),
+          ...(update.translationError
+            ? { actionError: update.translationError }
+            : {}),
           ...(parsed?.success
             ? { transcript: parsed.data, availability: "available" as const }
             : {}),
@@ -287,15 +302,11 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       } else void startPlaybackStream(get, set);
     });
 
-    // Stop polling when the panel is hidden or closed; the panel page can be
-    // kept alive by the browser for a long time and must not poll forever.
     window.addEventListener("pagehide", () => {
       playbackPort?.disconnect();
       playbackPort = null;
     });
 
-    // Always surface the shell UI even if background messaging failed — otherwise
-    // the panel stays on "Loading…" forever with no recovery path.
     set({ ready: true });
   },
 
@@ -388,7 +399,6 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         !get().transcript &&
         !get().loading
       ) {
-        // Auto-acquire never mutates playback (ads / paused / unmuted stay intact).
         void get().acquire(undefined, { allowPlaybackMutation: false });
       } else if (
         state.availability === "no-captions" &&
@@ -421,7 +431,34 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     const expectedVideoId = get().videoId;
     if (!expectedVideoId) return;
     const epoch = ++acquireEpoch;
-    set({ loading: true, transcript: null });
+
+    if (isLocalGeneratedTrack(trackId)) {
+      set({ loading: true, actionError: null });
+      try {
+        const raw = await bus.request<unknown>("transcript.get", {
+          id: `youtube:${expectedVideoId}:${trackId}`,
+        });
+        const parsed = TranscriptSchema.safeParse(raw);
+        if (
+          epoch !== acquireEpoch ||
+          get().videoId !== expectedVideoId ||
+          !parsed.success
+        )
+          return;
+        set({ transcript: parsed.data, availability: "available" });
+      } catch (error) {
+        if (epoch === acquireEpoch)
+          set({
+            actionError:
+              error instanceof Error ? error.message : get().tr("general.error"),
+          });
+      } finally {
+        if (epoch === acquireEpoch) set({ loading: false });
+      }
+      return;
+    }
+
+    set({ loading: true, transcript: null, actionError: null });
     try {
       const raw = await bus.request<unknown>("acq.acquire", {
         videoId: expectedVideoId,
@@ -441,7 +478,6 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         });
       } else if (result.reason === "player-initializing") {
         set({ availability: result.reason, transcript: null });
-        // Bound ad/startup waits via the shared refresh retry budget (max 8).
         if (epoch === acquireEpoch && refreshRetryCount < 8) {
           const delay = 400 * ++refreshRetryCount;
           setTimeout(() => {
@@ -490,6 +526,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       set({ actionError: e instanceof Error ? e.message : String(e) });
     }
   },
+
   async openSource(timeMs = 0) {
     const videoId = get().transcript?.video.videoId;
     if (!videoId) return;
@@ -504,6 +541,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
       set({ actionError: String(error) });
     }
   },
+
   async returnToVideo() {
     pageEpoch++;
     acquireEpoch++;
@@ -524,7 +562,6 @@ export const usePanelStore = create<PanelState>((set, get) => ({
     if (!videoId || get().savedView) return;
     const viewEpoch = pageEpoch;
     const requestEpoch = ++sttRequestEpoch;
-    // Opening saved work changes the view epoch even if the active video stays put.
     const isCurrent = () =>
       viewEpoch === pageEpoch &&
       requestEpoch === sttRequestEpoch &&
@@ -536,7 +573,9 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         videoId: string | null;
         phase: PanelState["sttPhase"];
         progress: number;
+        translationError?: string;
         transcript?: unknown;
+        tracks?: TranscriptTrack[];
         partialSegments?: TranscriptSegment[];
         checkpointAvailable?: boolean;
       }>("stt.status", { videoId });
@@ -562,6 +601,10 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         sttProgress: result.progress,
         sttPreview: result.partialSegments ?? get().sttPreview,
         sttCheckpoint: result.checkpointAvailable ?? false,
+        ...(result.tracks ? { tracks: [...result.tracks] } : {}),
+        ...(result.translationError
+          ? { actionError: result.translationError }
+          : {}),
         ...(parsed?.success
           ? { transcript: parsed.data, availability: "available" as const }
           : {}),
@@ -574,6 +617,7 @@ export const usePanelStore = create<PanelState>((set, get) => ({
         });
     }
   },
+
   async cancelTranscription() {
     const viewEpoch = pageEpoch;
     const requestEpoch = ++sttRequestEpoch;

@@ -40,7 +40,6 @@ import {
   upsertHighlight,
   deleteHighlight,
 } from "../storage/notes.js";
-import { setSecret, deleteSecret, getSecret } from "../storage/secrets.js";
 import { videoIdFromUrl } from "../providers/youtube/session.js";
 import { panelContextForTab } from "../platform/tab-context.js";
 import type { AudioSource } from "../providers/youtube/audio-source.js";
@@ -52,7 +51,10 @@ import {
 import { checkpointStatus } from "../storage/stt-checkpoints.js";
 import { getVersions, editSegment, undoEdit } from "../storage/edits.js";
 import { makeYouTubeTimestampUrl } from "../core/export.js";
-import { DEFAULT_STT_PROFILE } from "../stt/model-profile.js";
+import {
+  DEFAULT_STT_PROFILE,
+  LOCAL_ARABIC_TRACK_ID,
+} from "../stt/model-profile.js";
 
 let activeSttSession: { tabId: number; videoId: string } | null = null;
 
@@ -146,11 +148,7 @@ async function activeTab() {
   return tab;
 }
 
-/**
- * Resolve the YouTube tab a panel request should act on.
- * Never search other windows for a convenient YouTube tab: that can show a
- * transcript belonging to a different video than the one the user is viewing.
- */
+/** Resolve the YouTube tab a panel request should act on. */
 async function resolveTargetTabId(expectedVideoId?: string): Promise<number> {
   const active = await activeTab();
   const activeVideoId = videoIdFromUrl(active?.url ?? "");
@@ -161,7 +159,6 @@ async function resolveTargetTabId(expectedVideoId?: string): Promise<number> {
     });
   }
   if (active?.id != null && activeVideoId) return active.id;
-
   throw new AppError({
     code: "ACQ_NO_PLAYER",
     message: "active tab is not a YouTube video",
@@ -241,8 +238,6 @@ export default defineBackground(() => {
       .catch(() => undefined);
   });
 
-  // Chromium's browser action opens its native side panel. Firefox's toolbar
-  // click toggles its native sidebar without losing the user gesture.
   const toolbarAction = browser.action ?? browser.browserAction;
   toolbarAction.onClicked.addListener(() => {
     if ((browser as unknown as { sidePanel?: unknown }).sidePanel) return;
@@ -252,8 +247,6 @@ export default defineBackground(() => {
       }),
     );
   });
-
-  // ---- routing: panel -> content script ----
 
   bus.on("panel.context", z.object({}), ["extension-page"], async () => {
     return panelContextForTab(await activeTab());
@@ -271,6 +264,7 @@ export default defineBackground(() => {
     z.object({
       trackId: z.string().optional(),
       videoId: z.string().optional(),
+      allowPlaybackMutation: z.boolean().optional(),
     }),
     ["extension-page"],
     (p) => forwardToContent("acq.acquire", p, p.videoId),
@@ -343,6 +337,7 @@ export default defineBackground(() => {
       });
     },
   );
+
   bus.on(
     "stt.status",
     z.object({ videoId: z.string().regex(/^[\w-]{11}$/) }),
@@ -357,14 +352,23 @@ export default defineBackground(() => {
         if (current?.videoId === videoId && current.phase !== "idle")
           return current;
       }
-      const transcript = await getTranscript(
-        `youtube:${videoId}:${DEFAULT_STT_PROFILE.trackId}`,
-      );
-      return transcript
-        ? { videoId, phase: "ready", progress: 1, transcript }
-        : checkpointStatus(videoId, DEFAULT_STT_PROFILE);
+      const [english, arabic] = await Promise.all([
+        getTranscript(`youtube:${videoId}:${DEFAULT_STT_PROFILE.trackId}`),
+        getTranscript(`youtube:${videoId}:${LOCAL_ARABIC_TRACK_ID}`),
+      ]);
+      if (english) {
+        return {
+          videoId,
+          phase: "ready",
+          progress: 1,
+          transcript: english,
+          tracks: [english.track, ...(arabic ? [arabic.track] : [])],
+        };
+      }
+      return checkpointStatus(videoId, DEFAULT_STT_PROFILE);
     },
   );
+
   bus.on("stt.cancel", z.object({}), ["extension-page"], async () => {
     activeSttSession = null;
     if (!(await hasSttDocument()))
@@ -374,8 +378,6 @@ export default defineBackground(() => {
       type: "cancel",
     });
   });
-
-  // ---- relay: content script -> all panel pages ----
 
   bus.on(
     "page.videoChanged",
@@ -390,7 +392,6 @@ export default defineBackground(() => {
   );
 
   registerStorageHandlers();
-  registerAiHandlers();
   logger.info("background", "background worker started");
 });
 
@@ -555,40 +556,6 @@ export function registerStorageHandlers(): void {
     async (p) => {
       await deleteHighlight(p.id);
       return { ok: true };
-    },
-  );
-}
-export function registerAiHandlers(): void {
-  bus.on(
-    "ai.secret.set",
-    z.object({
-      providerId: z.string(),
-      key: z.string(),
-      sessionOnly: z.boolean().optional(),
-    }),
-    ["extension-page"],
-    async (p) => {
-      await setSecret(p.providerId, p.key, p.sessionOnly ?? false);
-      return { ok: true };
-    },
-  );
-
-  bus.on(
-    "ai.secret.delete",
-    z.object({ providerId: z.string() }),
-    ["extension-page"],
-    async (p) => {
-      await deleteSecret(p.providerId);
-      return { ok: true };
-    },
-  );
-
-  bus.on(
-    "ai.secret.has",
-    z.object({ providerId: z.string() }),
-    ["extension-page"],
-    async (p) => {
-      return { has: (await getSecret(p.providerId)) != null };
     },
   );
 }

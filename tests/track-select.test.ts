@@ -20,7 +20,6 @@ describe("buildTrackEntries", () => {
     expect(entries).toHaveLength(3);
     expect(entries[0]!.track.kind).toBe("manual");
     expect(entries[1]!.track.kind).toBe("asr");
-    // duplicate kinds get disambiguated ids
     expect(new Set(entries.map((e) => e.track.trackId)).size).toBe(3);
   });
 
@@ -37,6 +36,47 @@ describe("buildTrackEntries", () => {
       track({ baseUrl: "https://example.com/timedtext" }),
     ]);
     expect(entries[0]!.baseUrl).toBe("https://example.com/timedtext");
+  });
+
+  it("adds an Arabic YouTube translation when only translatable English exists", () => {
+    const entries = buildTrackEntries([
+      track({
+        languageCode: "en",
+        label: "English",
+        isTranslatable: true,
+        baseUrl:
+          "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&lang=en&name=main",
+      }),
+    ]);
+    const ar = entries.find((entry) => entry.track.languageCode === "ar");
+    expect(ar?.track.kind).toBe("translated");
+    expect(ar?.track.translatedFrom).toBe("en");
+    expect(new URL(ar!.baseUrl!).searchParams.get("tlang")).toBe("ar");
+  });
+
+  it("adds English from Arabic and never duplicates a native target", () => {
+    const entries = buildTrackEntries([
+      track({
+        languageCode: "ar",
+        label: "Arabic",
+        isTranslatable: true,
+        baseUrl:
+          "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&lang=ar&kind=asr",
+        kind: "asr",
+      }),
+      track({
+        languageCode: "en",
+        label: "English",
+        baseUrl:
+          "https://www.youtube.com/api/timedtext?v=dQw4w9WgXcQ&lang=en",
+      }),
+    ]);
+    expect(
+      entries.filter((entry) => entry.track.languageCode === "en"),
+    ).toHaveLength(1);
+    expect(entries.some((entry) => entry.track.kind === "translated")).toBe(
+      false,
+    );
   });
 });
 

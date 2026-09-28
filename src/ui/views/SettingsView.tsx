@@ -1,4 +1,4 @@
-// Settings tab: theme, language, strict local mode, backup, diagnostics.
+// Settings tab: theme, language, backup, diagnostics.
 
 import { usePanelStore } from "../store.js";
 import { logger } from "../../core/logger.js";
@@ -93,22 +93,6 @@ export function SettingsView() {
           <option value="en">English</option>
           <option value="ar">العربية</option>
         </select>
-      </div>
-
-      <div className="settings-row">
-        <label htmlFor="set-strict">{s.tr("settings.strictMode")}</label>
-        <div className="hint">{s.tr("settings.strictMode.description")}</div>
-        <label style={{ fontWeight: 400 }}>
-          <input
-            id="set-strict"
-            type="checkbox"
-            checked={s.settings.strictMode}
-            onChange={(e) =>
-              void s.updateSettings({ strictMode: e.target.checked })
-            }
-          />{" "}
-          {s.tr("settings.strictMode")}
-        </label>
       </div>
 
       <div className="settings-row">

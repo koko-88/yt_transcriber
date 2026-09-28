@@ -59,7 +59,8 @@ export type AcquisitionMethod =
   | "yt-player-url"
   | "yt-player-observed"
   | "yt-transcript-panel"
-  | "local-whisper";
+  | "local-whisper"
+  | "local-translation";
 
 /** The format of the raw caption data */
 export type CaptionFormat = "json3" | "srv3" | "vtt" | "stt";

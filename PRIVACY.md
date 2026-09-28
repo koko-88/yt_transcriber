@@ -1,62 +1,65 @@
 # Privacy Policy
 
-_Transcript Workbench for YouTube_ — last updated 2026-09-27.
+_Transcript Workbench for YouTube_ — last updated 2026-09-28.
 
 ## Summary
 
-The extension has no backend or analytics. Saved work lives in your browser profile. Caption/media requests and model downloads contact their source hosts. AI text is sent directly to your configured provider only after an explicit action and consent.
+The extension has no backend, accounts or analytics. Saved work lives in your
+browser profile. Caption/media requests and on-demand local-model downloads
+contact only their source hosts. Transcript text is not sent to a hosted AI
+provider by this product.
 
 ## What is stored, and where
 
-| Data                                                                                     | Where                                                         | Why                                                  | Leaves your device?                                            |
-| ---------------------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------- |
-| Settings (theme, language, Strict Local Mode, chosen provider/model, consent timestamps) | `browser.storage.local`                                       | Remember your preferences                            | No                                                             |
-| Saved transcripts, video metadata, library list                                          | IndexedDB (`yt-transcript-workbench`) in the extension origin | Library, exports, AI context                         | No                                                             |
-| Notes and highlights                                                                     | IndexedDB                                                     | Timestamp-linked annotations                         | No (included in local backup export only)                      |
-| AI provider API keys                                                                     | IndexedDB (or `storage.session` for "session only")           | Authenticate your own provider calls                 | Only to the provider you configured, as the request credential |
-| AI results cache (max 200 entries, pruned oldest-first)                                  | IndexedDB                                                     | Avoid re-paying for the same request                 | No                                                             |
-| Diagnostics log (in-memory ring buffer, last 500 events; values redacted)                | Memory of the panel/background                                | Troubleshooting; copied only if you press the button | No                                                             |
-| Playback position polling                                                                | Not stored                                                    | Follow-along highlighting                            | No                                                             |
+| Data                                                                      | Where                                                         | Why                                                  | Leaves your device?                       |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------- | ---------------------------------------------------- | ----------------------------------------- |
+| Settings (theme and language)                                             | `browser.storage.local`                                       | Remember your preferences                            | No                                        |
+| Saved transcripts and video metadata                                      | IndexedDB (`yt-transcript-workbench`) in the extension origin | Library and exports                                  | No                                        |
+| Notes and highlights                                                      | IndexedDB                                                     | Timestamp-linked annotations                         | No (local backup export only)             |
+| Recognition/translation results                                           | IndexedDB                                                     | Reuse locally generated Arabic/English tracks        | No                                        |
+| Diagnostics log (in-memory ring buffer, last 500 events; values redacted) | Memory of the panel/background                                | Troubleshooting; copied only if you press the button | No                                        |
+| Playback position polling                                                 | Not stored                                                    | Follow-along highlighting                            | No                                        |
 
-No browsing history, no page content, no keystrokes, no analytics, no crash
-reporting, no remote configuration.
+No browsing history, no keystrokes, no analytics, no crash reporting, no
+remote configuration and no product API keys are collected.
 
 ## Workspace persistence
 
-Original and corrected transcripts, the last 100 undo operations per transcript, notes, and completed AI answers (including questions, provider/model, coverage and citation timestamps) are stored in extension-origin IndexedDB. Completed AI answers are saved history, separate from the 200-entry request cache. Local backups include this saved work but never API keys.
+Original and corrected transcripts, the last 100 undo operations per transcript,
+notes and locally generated language tracks are stored in extension-origin
+IndexedDB. Local backups include saved workspace data but do not include media
+URLs, audio or model files.
 
-Speech-recognition checkpoints contain the video ID, model/profile identity, duration, recognized text and overlap state. They do not contain audio or media URLs. They are excluded from backups, expire after seven days, and are removed when recognized work completes or you explicitly discard it. Expired checkpoints are cleaned on access or the next checkpoint write.
+Speech-recognition checkpoints contain the video ID, model/profile identity,
+duration, recognized text and overlap state. They do not contain audio or media
+URLs. They are excluded from backups, expire after seven days, and are removed
+when recognized work completes or you explicitly discard it.
 
-The media observation cache uses temporary browser session storage for expiring, tab/video-bound Googlevideo URLs; it is not permanent library storage.
+The media observation cache uses temporary browser session storage for expiring,
+tab/video-bound Googlevideo URLs; it is not permanent library storage.
 
 ## Network requests we make
 
 1. **YouTube caption data** — when you open a video page, the content script
-   reads caption tracks from the player and the caption data the player itself
-   requests, exactly as the page would. This stays between your browser and
-   YouTube.
-2. **AI providers** — only when you press a pipeline button (or _Test
-   connection_) in the **AI** tab. The request goes directly from your browser
-   to the provider's API with your API key. The transcript text (or, for Q&A,
-   the most relevant excerpts) is included so the model can answer. That
-   provider's own privacy policy then applies to that request. On Firefox, the
-   extension declares optional `websiteContent` data collection and requests
-   consent via the built-in permissions UI before the first send.
-3. **Local speech recognition** — the existing media pipeline downloads the active video's audio from YouTube/Googlevideo and runs recognition locally. Model/tokenizer files are downloaded from the configured Hugging Face model hosts and may be cached locally. Audio is not sent to an AI provider.
+   reads caption-track metadata from the player and fetches the caption resource
+   for the chosen track. If YouTube marks a source track translatable, the
+   extension can request an Arabic or English timedtext translation from YouTube
+   using the same caption service.
+2. **YouTube/Googlevideo media** — only for the no-caption local transcription
+   path. The extension acquires the active video's full audio media resource in
+   bounded ranges; it does not need to record playback in real time.
+3. **Hugging Face model assets** — local speech-recognition and local
+   English-to-Arabic translation model/tokenizer files are downloaded on first
+   use and can be cached in the browser profile. Inference itself runs locally.
 
-Strict Local Mode (Settings) blocks category 2 entirely except for
-`localhost`/`127.0.0.1` servers you run yourself.
+No transcript is transmitted to OpenAI, Gemini, OpenRouter, Groq, Mistral,
+Ollama, LM Studio or any other user-configured inference provider by the product.
 
 ## Your controls
 
-- Delete a saved transcript: **Library → ✕**.
-- Export / import a library backup: **Settings → Backup** (API keys are never
-  included).
-- Delete a saved AI answer: **AI → Saved AI answers → Delete**.
+- Delete a saved transcript: **Library → Remove**.
+- Export / import a library backup: **Settings → Backup**.
 - Discard interrupted transcription progress: **Discard progress and restart**.
-- Delete an API key: **AI → Delete**.
-- Revoke a provider permission: your browser's extension settings for this
-  extension (_Site access_ / _Permissions_).
 - Remove everything: uninstalling the extension deletes its IndexedDB and
   `storage.local`/`storage.session` data with it.
 - Diagnostics: **Settings → Copy diagnostics** copies a redacted log to the
@@ -64,19 +67,16 @@ Strict Local Mode (Settings) blocks category 2 entirely except for
 
 ## Data we never collect
 
-Document type, host permissions beyond `youtube.com` unless you grant them,
-authentication information, personal communications, health information,
-financial information, location, web history, user activity, or website content
-beyond the transcript you asked for.
+Authentication information, personal communications, health information,
+financial information, location, web history, advertising identifiers or user
+activity outside the YouTube transcript workflow.
 
 ## Limited Use statement
 
 Data accessed by this extension is used only to provide its single purpose —
-showing, searching, exporting, saving and analysing the transcript of the
-YouTube video you are looking at. It is not transferred to third parties except
-as described above (your own configured AI provider), is not used for
-advertising, is not used to determine creditworthiness or for lending purposes,
-and is not sold.
+showing, translating, searching, exporting and saving the transcript of the
+YouTube video you are looking at. It is not sold, used for advertising,
+creditworthiness or lending decisions, or transferred to a hosted AI provider.
 
 ## Contact
 

@@ -7,7 +7,7 @@ import {
   checkpointProfileKey,
   checkpointStatus,
 } from "../../storage/stt-checkpoints.js";
-import type { TranscriptSegment } from "../../core/model.js";
+import type { TranscriptSegment, TranscriptTrack } from "../../core/model.js";
 import type { Transcript } from "../../core/model.js";
 import {
   makeTranscriptId,
@@ -22,23 +22,33 @@ import {
 } from "../../stt/transcript-normalizer.js";
 import {
   DEFAULT_STT_PROFILE,
+  generatedLocalTracks,
   type SttModelProfile,
 } from "../../stt/model-profile.js";
+import { buildArabicTranscript } from "../../translation/transcript.js";
 
 type Phase =
-  "idle" | "preparing" | "transcribing" | "ready" | "error" | "cancelled";
+  | "idle"
+  | "preparing"
+  | "transcribing"
+  | "ready"
+  | "error"
+  | "cancelled";
 interface Status {
   videoId: string | null;
   phase: Phase;
   progress: number;
   error?: string;
+  translationError?: string;
   transcript?: Transcript;
+  tracks?: TranscriptTrack[];
   partialSegments?: TranscriptSegment[];
   checkpointAvailable?: boolean;
 }
 let status: Status = { videoId: null, phase: "idle", progress: 0 };
 let controller: AbortController | null = null;
 let worker: Worker | null = null;
+let translationWorker: Worker | null = null;
 let generation = 0;
 
 function publish(next: Status): void {
@@ -54,6 +64,8 @@ function cancel(): void {
   controller = null;
   worker?.terminate();
   worker = null;
+  translationWorker?.terminate();
+  translationWorker = null;
   if (status.phase === "preparing" || status.phase === "transcribing")
     publish({
       ...status,
@@ -63,12 +75,13 @@ function cancel(): void {
     });
 }
 
-function waitWorker(
+function waitOnWorker(
+  current: Worker | null,
   message: unknown,
   signal: AbortSignal,
+  reportModelProgress = false,
 ): Promise<Record<string, unknown>> {
-  const current = worker;
-  if (!current) return Promise.reject(new Error("STT worker closed"));
+  if (!current) return Promise.reject(new Error("Worker closed"));
   return new Promise((resolve, reject) => {
     const cleanup = () => {
       current.removeEventListener("message", onMessage);
@@ -76,7 +89,7 @@ function waitWorker(
       signal.removeEventListener("abort", onAbort);
     };
     const onMessage = (event: MessageEvent<Record<string, unknown>>) => {
-      if (event.data.type === "model-progress") {
+      if (event.data.type === "model-progress" && reportModelProgress) {
         const p = Number(event.data.progress);
         if (Number.isFinite(p))
           publish({
@@ -112,6 +125,58 @@ function waitWorker(
   });
 }
 
+async function translateEnglishToArabic(
+  english: Transcript,
+  signal: AbortSignal,
+  jobGeneration: number,
+): Promise<Transcript> {
+  translationWorker = new Worker(
+    new URL("../../translation/worker.ts", import.meta.url),
+    { type: "module" },
+  );
+  const init = await waitOnWorker(
+    translationWorker,
+    { type: "init" },
+    signal,
+  );
+  if (init.type !== "ready") throw new Error("Arabic translation model did not initialize");
+
+  const translatedTexts: string[] = new Array(english.segments.length);
+  const batchSize = 8;
+  for (let start = 0; start < english.segments.length; start += batchSize) {
+    if (signal.aborted || generation !== jobGeneration) {
+      throw new DOMException("Cancelled", "AbortError");
+    }
+    const batch = english.segments.slice(start, start + batchSize);
+    const result = await waitOnWorker(
+      translationWorker,
+      { type: "translate", texts: batch.map((segment) => segment.text) },
+      signal,
+    );
+    const texts = Array.isArray(result.texts)
+      ? result.texts.map((text) => String(text))
+      : [];
+    if (texts.length !== batch.length) {
+      throw new Error("Arabic translation returned an unexpected segment count");
+    }
+    for (let index = 0; index < texts.length; index++) {
+      translatedTexts[start + index] = texts[index]!;
+    }
+    publish({
+      ...status,
+      videoId: english.video.videoId,
+      phase: "transcribing",
+      transcript: english,
+      tracks: [english.track],
+      progress: Math.min(
+        0.995,
+        0.95 + 0.045 * Math.min(1, (start + batch.length) / english.segments.length),
+      ),
+    });
+  }
+  return buildArabicTranscript(english, translatedTexts);
+}
+
 async function run(
   source: AudioSource,
   signal: AbortSignal,
@@ -135,13 +200,15 @@ async function run(
     worker = new Worker(new URL("../../stt/worker.ts", import.meta.url), {
       type: "module",
     });
-    const init = await waitWorker(
+    const init = await waitOnWorker(
+      worker,
       {
         type: "init",
         wasmUrl: new URL("ort/", location.origin).toString(),
         profile,
       },
       signal,
+      true,
     );
     if (init.type !== "ready") throw new Error("STT model did not initialize");
     const normalizer = new TranscriptNormalizer(checkpoint?.state);
@@ -149,7 +216,6 @@ async function run(
     let mediaDurationSeconds: number | null = null;
     for await (const window of readPcmWindows(source, signal)) {
       if (signal.aborted || generation !== jobGeneration) return;
-      // Decode with the existing range pipeline; skip already recognized windows.
       if (checkpoint && window.endSeconds <= checkpoint.endSeconds) continue;
       if (
         source.tabId == null ||
@@ -163,7 +229,8 @@ async function run(
         cancel();
         return;
       }
-      const result = await waitWorker(
+      const result = await waitOnWorker(
+        worker,
         { type: "chunk", audio: window.audio },
         signal,
       );
@@ -204,14 +271,13 @@ async function run(
         partialSegments: preview,
         checkpointAvailable: true,
         progress: total
-          ? Math.min(0.99, 0.1 + (0.9 * decodedEndSeconds) / total)
+          ? Math.min(0.94, 0.1 + (0.84 * decodedEndSeconds) / total)
           : 0.1,
       });
     }
     if (signal.aborted || generation !== jobGeneration) return;
     const segments = normalizer.finish();
-    if (!segments.length)
-      throw new Error("Speech model returned no transcript");
+    if (!segments.length) throw new Error("Speech model returned no transcript");
     if (
       source.tabId == null ||
       !(await browser.runtime.sendMessage({
@@ -222,16 +288,17 @@ async function run(
       }))
     )
       return;
-    const transcript: Transcript = {
+
+    const englishTrack = generatedLocalTracks()[0]!;
+    const englishTranscript: Transcript = {
       id: makeTranscriptId(source.videoId, profile.trackId),
       schemaVersion: TRANSCRIPT_SCHEMA_VERSION,
       video: source.metadata,
       track: {
+        ...englishTrack,
         trackId: profile.trackId,
-        languageCode: "und",
+        languageCode: profile.languageCode,
         languageLabel: profile.trackLabel,
-        kind: "asr",
-        isDefaultForVideo: true,
       },
       segments,
       source: {
@@ -247,14 +314,35 @@ async function run(
       acquiredAt: Date.now(),
       textHash: hashText(segmentsToText(segments)),
     };
-    await saveTranscript(transcript);
+    await saveTranscript(englishTranscript);
+
+    let tracks: TranscriptTrack[] = [englishTranscript.track];
+    let translationError: string | undefined;
+    try {
+      const arabicTranscript = await translateEnglishToArabic(
+        englishTranscript,
+        signal,
+        jobGeneration,
+      );
+      if (signal.aborted || generation !== jobGeneration) return;
+      await saveTranscript(arabicTranscript);
+      tracks = [englishTranscript.track, arabicTranscript.track];
+    } catch (error) {
+      if (signal.aborted || generation !== jobGeneration) return;
+      translationError =
+        "Arabic transcript generation could not complete. English is still available.";
+      console.warn("local Arabic translation failed", error);
+    }
+
     await deleteCheckpoint(source.videoId);
     if (!signal.aborted && generation === jobGeneration)
       publish({
         videoId: source.videoId,
         phase: "ready",
         progress: 1,
-        transcript,
+        transcript: englishTranscript,
+        tracks,
+        ...(translationError ? { translationError } : {}),
       });
   } catch (error) {
     if (!signal.aborted)
@@ -269,6 +357,8 @@ async function run(
     if (generation === jobGeneration) {
       worker?.terminate();
       worker = null;
+      translationWorker?.terminate();
+      translationWorker = null;
       controller = null;
     }
   }

@@ -5,19 +5,12 @@ import { usePanelStore } from "./store.js";
 import { TranscriptView } from "./views/TranscriptView.js";
 import { ExportView } from "./views/ExportView.js";
 import { LibraryView } from "./views/LibraryView.js";
-import { AiView } from "./views/AiView.js";
 import { NotesView } from "./views/NotesView.js";
 import { SettingsView } from "./views/SettingsView.js";
 
-const TABS = [
-  "transcript",
-  "export",
-  "library",
-  "notes",
-  "ai",
-  "settings",
-] as const;
+const TABS = ["transcript", "library", "notes", "export", "settings"] as const;
 type AppTab = (typeof TABS)[number];
+type StoredTab = Exclude<AppTab, "export">;
 
 export function App() {
   const transcriptId = usePanelStore((s) => s.transcript?.id);
@@ -29,7 +22,7 @@ export function App() {
   const theme = usePanelStore((s) => s.settings.theme);
   const init = usePanelStore((s) => s.init);
   const [utilityTab, setUtilityTab] = useState<"export" | null>(null);
-  const activeTab: AppTab = utilityTab ?? tab;
+  const activeTab: AppTab = utilityTab ?? (tab as StoredTab);
 
   useEffect(() => {
     void init();
@@ -117,7 +110,7 @@ export function App() {
               onClick={() => activateTab(id)}
             >
               {id === "export"
-                ? tr("transcript.export")
+                ? `${tr("transcript.export")} + ${tr("transcript.actions")}`
                 : tr(`nav.${id}` as "nav.transcript")}
             </button>
           );
@@ -131,11 +124,10 @@ export function App() {
         className="panel"
       >
         {activeTab === "transcript" && <TranscriptView />}
-        {activeTab === "export" && <ExportView />}
+        {activeTab === "export" && (
+          <ExportView onNavigate={(next) => activateTab(next)} />
+        )}
         {activeTab === "library" && <LibraryView />}
-        <div className="workspace-pane" hidden={activeTab !== "ai"}>
-          <AiView />
-        </div>
         <div className="workspace-pane" hidden={activeTab !== "notes"}>
           <NotesView key={transcriptId} />
         </div>

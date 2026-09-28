@@ -23,32 +23,25 @@ The extension runs in four contexts with different trust levels:
 | ----------------------------------------------- | ----------------------------------------- | -------------------------------------------------------------------------------- |
 | MAIN-world bridge (`youtube-bridge.content.ts`) | **Untrusted** (page JavaScript runs here) | Read player state, toggle captions, observe the player's own `timedtext` traffic |
 | ISOLATED content script (`youtube.content.ts`)  | Trusted                                   | Validate bridge payloads, fetch same-origin captions, talk to background         |
-| Background service worker                       | Most trusted                              | Permissions, secrets, network egress, storage                                    |
-| Side panel (extension page)                     | Trusted                                   | UI only; all privileged work is requested over the message bus                   |
+| Background service worker                       | Most trusted                              | Permissions, media/session routing and storage                                    |
+| Side panel (extension page)                     | Trusted                                   | UI only; privileged work is requested over the message bus                       |
 
 ### Assets and how they are protected
 
-1. **API keys.** Stored in the extension's own IndexedDB (or `storage.session`
-   when "session only" is enabled). They are never logged: the `Secret` type
-   serializes to `[redacted]`, the logger redacts any key/secret/token-shaped
-   field and deep-redacts nested objects, and the bus error path logs only the
-   message _type_, never the payload. Gemini keys are sent in the
-   `x-goog-api-key` header so they never appear in a URL (and therefore never in
-   logs or error text).
-2. **Untrusted input.** Page state, MAIN-world messages, caption bodies,
-   provider responses and stored records are all validated with zod before use.
-   Bridge events carry a per-session nonce; responses are matched by
-   `op#reqId`; times out bounded per operation.
-3. **Network egress.** All provider traffic flows through
-   `gatedFetch()` (`src/platform/network.ts`): HTTPS-only (except loopback),
-   `credentials: 'omit'`, `redirect: 'error'` so a provider cannot bounce a
-   credentialed request to another origin, a hard timeout, and a 4 MB response
-   body cap. Remote providers are additionally refused outright when Strict
-   Local Mode is on, and every remote origin requires an explicit runtime
-   permission grant.
-4. **Rendering.** Transcript text, titles and AI output are rendered as text
-   nodes only — no `dangerouslySetInnerHTML`, no Markdown-to-HTML step and no
-   `innerHTML` anywhere in the UI. Exported filenames are sanitized.
+1. **Untrusted input.** Page state, MAIN-world messages, caption bodies and
+   stored records are validated with zod before use. Bridge events carry a
+   per-session nonce; responses are matched by `op#reqId`; timeouts are bounded
+   per operation.
+2. **Network egress.** Core network access is restricted to YouTube caption
+   data, Googlevideo media for the no-caption path, and Hugging Face model
+   assets. The product does not request optional OpenAI/Gemini/OpenRouter/etc.
+   provider origins and exposes no API-key setup flow.
+3. **Local model execution.** Full-audio recognition and English-to-Arabic
+   translation run in extension workers. Media is read in bounded windows rather
+   than loaded as one full decoded PCM file. Model weights can be cached by
+   Transformers.js in the browser profile.
+4. **Rendering.** Transcript text and titles are rendered as text nodes only —
+   no Markdown-to-HTML step. Exported filenames are sanitized.
 5. **Message bus.** Every handler declares its accepted sender classes
    (`content-script` / `extension-page` / `untrusted`) and a payload schema;
    unknown message types and wrong sender classes are rejected before the
@@ -58,40 +51,45 @@ The extension runs in four contexts with different trust levels:
 
 ### Permissions rationale
 
-| Permission                  | Why it is needed                                                                                  |
-| --------------------------- | ------------------------------------------------------------------------------------------------- |
-| `storage`                   | Save settings, library, AI cache                                                                  |
-| `unlimitedStorage`          | Long transcripts and libraries exceed the default 10 MB quota in Firefox/Chromium for some videos |
-| `sidePanel` (Chromium only) | Opens the workbench in the browser's side panel                                                   |
-| `https://www.youtube.com/*` | Content scripts must run on video pages to read captions                                          |
-| Optional AI origins         | Requested at runtime, per provider, only when you configure it                                    |
+| Permission                         | Why it is needed                                                                                         |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `storage`                          | Save settings and the local workspace                                                                    |
+| `unlimitedStorage`                 | Long transcripts, generated tracks and libraries can exceed default extension storage quotas             |
+| `sidePanel` (Chromium only)        | Opens the workbench in the browser's side panel                                                          |
+| `offscreen` (Chromium only)        | Hosts cancellable local speech/translation workers independently of the visible panel                    |
+| `webRequest` (Chromium only)       | Passively observes the active video's already-resolved media request for the no-caption local path       |
+| `https://www.youtube.com/*`        | Content scripts and caption acquisition on video pages                                                   |
+| `https://*.googlevideo.com/*`      | Bounded media reads for local no-caption transcription                                                   |
+| Hugging Face model hosts           | On-demand local model/tokenizer downloads                                                                |
 
-The extension does **not** request `scripting`, `tabs`, `history`, `cookies`,
-`<all_urls>`, and does not use `web_accessible_resources` or
+The extension does **not** request `scripting`, `history`, `cookies`,
+`<all_urls>`, remote AI-provider origins, `web_accessible_resources` or
 `externally_connectable`. Manifest assertions enforcing this are part of the
 build (`npm run check:manifest`).
 
 ### Known accepted risks
 
 - **Extensions are not a sandbox against other extensions or local users.**
-  Anything the browser exposes to extension contexts (including stored API keys)
-  is readable by a compromised extension with the same privileges. Keys are
-  stored as-is, in the extension origin, per the documented threat model; there
-  is no OS keychain integration.
-- **Dev-only dependency advisories.** The test toolchain is not shipped in the
-  packaged extension. We keep `vitest`/`@vitest/coverage-v8` on a patched
-  release and audit with `npm audit --omit=dev` in CI; findings that only affect
-  test-time code are documented rather than force-upgraded.
-- **YouTube internals are undocumented.** Acquisition depends on the player's
-  own caption request; if YouTube changes it, the extension fails closed with an
-  explicit availability state (`unsupported-page-structure`,
-  `needs-player-interaction`) rather than guessing.
+  Anything another privileged local process can read from the browser profile is
+  outside this extension's security boundary.
+- **YouTube internals are undocumented.** Acquisition depends on player metadata,
+  signed caption/media URLs and the player's own request behavior. If YouTube
+  changes these surfaces, the extension fails closed with explicit availability
+  states rather than attempting signature deciphering or bypassing access
+  controls.
+- **On-demand model supply chain.** Local model weights are fetched from named
+  Hugging Face repositories. Model identifiers are code-pinned and the browser
+  cache reduces repeated downloads; release review must treat model changes as a
+  dependency/security change.
+- **Firefox local-STT gap.** Firefox currently lacks the Chromium offscreen
+  execution host used by the no-caption pipeline. Caption-track and YouTube
+  translation flows remain available there.
 
 ## Hardening checklist for contributors
 
 - Never add `innerHTML`, `eval`, `new Function`, or remote script URLs.
-- Never log a payload, key, or full request URL of a provider call.
 - Add a schema for every new bus message and declare its sender class.
 - Prefer feature detection over user-agent sniffing.
-- Keep new host permissions optional unless they are required for the core
-  YouTube flow.
+- Keep host permissions limited to the core YouTube/media/model flow.
+- Treat model-ID changes like dependency changes: review provenance, license and
+  browser compatibility before merging.

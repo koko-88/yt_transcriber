@@ -26,7 +26,7 @@ body,
 }
 
 .tabbar button {
-  flex: 1 0 64px;
+  flex: 1 0 72px;
   min-block-size: 38px;
   padding: var(--core-space-6) var(--core-space-8);
 }
@@ -83,8 +83,7 @@ body,
 
 .transcript-view .transcript-search input,
 .transcript-view .transcript-controls > select,
-.transcript-view .transcript-controls > .btn,
-.transcript-view .action-trigger {
+.transcript-view .transcript-controls > .btn {
   min-block-size: 34px;
   block-size: 34px;
 }
@@ -116,10 +115,8 @@ body,
   block-size: 28px;
 }
 
-/* Export has its own top-level tab now; keep only the compact Actions trigger
- * in the transcript toolbar. Export remains reachable from Actions as a fallback.
- */
-.transcript-view .action-menu > .action-trigger:first-child {
+/* Export and secondary actions live in their own top-level tab. */
+.transcript-view .action-menu {
   display: none;
 }
 
@@ -138,7 +135,8 @@ body,
   overflow-y: auto;
 }
 
-.export-card {
+.export-card,
+.export-templates {
   display: flex;
   flex-direction: column;
   gap: var(--core-space-8);
@@ -146,26 +144,52 @@ body,
 
 .export-view .action-menu {
   inline-size: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--core-space-8);
+}
+
+.export-view .action-menu > .action-trigger {
+  flex: 1 1 140px;
+  min-block-size: 44px;
 }
 
 .export-view .action-menu > .action-trigger:first-child {
-  inline-size: 100%;
-  min-block-size: 44px;
   background: var(--ui-accent);
   border-color: var(--ui-accent);
   color: var(--ui-on-accent);
 }
 
-.export-view .action-menu > .action-trigger:last-of-type {
-  display: none;
-}
-
 .export-view .action-popover {
   position: static;
+  flex: 1 0 100%;
   inline-size: 100%;
   max-block-size: none;
-  margin-block-start: var(--core-space-8);
+  margin-block-start: var(--core-space-4);
   box-shadow: none;
+}
+
+.export-template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--core-space-8);
+}
+
+.export-template-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--core-space-6);
+  min-inline-size: 0;
+  padding: var(--core-space-12);
+  border: 1px solid var(--ui-border);
+  border-radius: var(--core-radius-md);
+  background: var(--ui-canvas);
+}
+
+.export-template-formats {
+  color: var(--ui-accent);
+  font-size: var(--semantic-type-caption);
+  font-weight: var(--core-font-weight-semibold);
 }
 
 @media (max-height: 620px) {

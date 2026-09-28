@@ -58,6 +58,7 @@ export const TranscriptSourceSchema = z.object({
     "yt-player-observed",
     "yt-transcript-panel",
     "local-whisper",
+    "local-translation",
   ]),
   format: z.enum(["json3", "srv3", "vtt", "stt"]),
   completeness: z

@@ -21,6 +21,23 @@ this list stays complete and OSI-approved.
 | zod                       | ^3.25.0       | MIT        | Colin McDonnell                     |
 | zustand                   | ^5.0.0        | MIT        | Paul Henschel                       |
 
+## On-demand local models
+
+The extension does not bundle model weights in the store package. When local
+speech recognition or Arabic generation is first used, compatible ONNX model
+weights are downloaded from Hugging Face and cached by Transformers.js in the
+browser profile.
+
+- `onnx-community/whisper-tiny`, converted from `openai/whisper-tiny`, is used
+  for local multilingual speech recognition / English translation.
+- `onnx-community/opus-mt-en-ar`, converted from
+  `Helsinki-NLP/opus-mt-en-ar`, is used for local English-to-Arabic text
+  translation. The ONNX Community model card identifies this model as
+  CC-BY-4.0; attribution to the upstream Helsinki-NLP model is retained here.
+
+These model repositories are fetched only for the corresponding local feature;
+no API key or hosted inference provider is used.
+
 ## Build-time-only dependencies (not shipped)
 
 eslint, typescript, typescript-eslint, prettier, vitest, @vitest/coverage-v8,

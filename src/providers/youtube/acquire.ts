@@ -132,6 +132,25 @@ function captionName(url: string | undefined): string | null {
   }
 }
 
+function matchTarget(
+  entry: TrackEntry,
+  videoId: string,
+  includeIdentity = false,
+) {
+  const translated = entry.track.kind === "translated";
+  const sourceLanguage = entry.track.translatedFrom ?? entry.track.languageCode;
+  const sourceKind =
+    entry.sourceKind ?? (entry.track.kind === "asr" ? "asr" : "manual");
+  return {
+    languageCode: sourceLanguage,
+    videoId,
+    ...(sourceKind === "asr" ? { kind: "asr" } : {}),
+    ...(translated ? { translatedTo: entry.track.languageCode } : {}),
+    ...(includeIdentity && entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
+    ...(includeIdentity && entry.vssId ? { vssId: entry.vssId } : {}),
+  };
+}
+
 function requireComplete(
   transcript: Transcript,
   snapshot: PlayerSnapshot,
@@ -174,7 +193,6 @@ function fail(reason: Availability, tracer: Tracer): AcquisitionResult {
     ok: false,
     reason,
     retryable: RETRYABLE.has(reason),
-
     diagnostics: tracer.traces,
   };
 }
@@ -226,14 +244,9 @@ async function tryStaticFetch(
   if (!entry.baseUrl) return null;
   const u = new URL(entry.baseUrl);
   u.searchParams.set("fmt", "json3");
-  if (
-    !timedTextMatchesTrack(u.toString(), {
-      languageCode: entry.track.languageCode,
-      videoId: deps.videoId,
-      ...(entry.track.kind === "asr" ? { kind: "asr" } : {}),
-    })
-  )
+  if (!timedTextMatchesTrack(u.toString(), matchTarget(entry, deps.videoId))) {
     return null;
+  }
   const res = await tracer.run("c1-static-url", "fetch", () =>
     deps.fetchCaption(u.toString(), deps.signal),
   );
@@ -304,7 +317,6 @@ async function captureNonEmpty(
             ? "matching timedtext stayed empty"
             : "no timedtext response observed",
           retryable: true,
-          // Distinguishes soft-blocked empty 200s from "player never fired".
           userMessageKey: sawMatchingEmpty
             ? "availability.fetch-empty"
             : undefined,
@@ -320,15 +332,10 @@ async function captureNonEmpty(
     };
     const matches = (c: TimedTextCapture): boolean => {
       if (c.status !== 200) return false;
-      const track = entry.track;
-
-      return timedTextMatchesTrack(c.url, {
-        languageCode: track.languageCode,
-        ...(track.kind === "asr" ? { kind: "asr" } : {}),
-        videoId: deps.videoId,
-        ...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
-        ...(entry.vssId ? { vssId: entry.vssId } : {}),
-      });
+      return timedTextMatchesTrack(
+        c.url,
+        matchTarget(entry, deps.videoId, true),
+      );
     };
     const unsub = deps.bridge.onTimedText((c) => {
       if (!matches(c)) return;
@@ -393,8 +400,6 @@ async function tryPlayerObserved(
       await tracer
         .run("c3b-capture", "ensurePlaying", () => deps.bridge.ensurePlaying())
         .catch(() => undefined);
-      // After an empty 200 the player may need one force-reload nudge while
-      // the SAME capture window keeps observing. Do not start a second timeout.
       nudgeTimer = setTimeout(() => {
         nudgePromise = (async () => {
           await deps.bridge.enableTrack({
@@ -409,7 +414,6 @@ async function tryPlayerObserved(
         })().catch(() => undefined);
       }, EMPTY_RESPONSE_NUDGE_MS);
     } else if (!arrivedWithoutPlayback) {
-      // Non-invasive path: re-enable the track once without mute/seek/play.
       nudgeTimer = setTimeout(() => {
         nudgePromise = deps.bridge
           .enableTrack({
@@ -431,7 +435,6 @@ async function tryPlayerObserved(
         e.code === "ACQ_TIMEOUT" &&
         e.userMessageKey === "availability.fetch-empty"
       ) {
-        // Matching empty 200(s) only — precise fetch-empty upstream.
         return null;
       }
       throw e;
@@ -475,7 +478,6 @@ async function tryPlayerObserved(
   } finally {
     if (nudgeTimer) clearTimeout(nudgeTimer);
     captureAbort.abort();
-    // A running reload must finish before restoration.
     if (nudgePromise) await nudgePromise;
     try {
       await tracer.run("restore", "restorePlayback", () =>
@@ -518,6 +520,9 @@ const strategies: readonly TranscriptStrategy[] = [
   {
     id: "player-observed",
     canHandle: (entry, entries) => {
+      // Synthetic translations are fetched directly through the source track's
+      // signed timedtext URL + tlang. We never guess at player translation APIs.
+      if (entry.track.kind === "translated") return false;
       const peers = entries.filter(
         (other) =>
           other.track.languageCode === entry.track.languageCode &&
@@ -563,8 +568,6 @@ export async function acquireTranscript(
   if (!snapshot.videoId) return fail("not-a-video-page", tracer);
   if (snapshot.adPlaying) return fail("player-initializing", tracer);
   if (snapshot.videoId !== deps.videoId) {
-    // Advertisement or pre-roll still attached to a different media id —
-    // wait without mutating playback.
     return fail("player-initializing", tracer);
   }
 
@@ -593,7 +596,11 @@ export async function acquireTranscript(
   for (const strategy of strategies) {
     assertCurrent(deps);
     if (!strategy.canHandle(first, entries)) {
-      if (strategy.id === "player-observed") sawAmbiguousTrack = true;
+      if (
+        strategy.id === "player-observed" &&
+        first.track.kind !== "translated"
+      )
+        sawAmbiguousTrack = true;
       continue;
     }
     try {
