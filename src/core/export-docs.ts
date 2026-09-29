@@ -27,9 +27,7 @@ function safeBase(title: string): string {
 }
 
 function bodyText(line: RenderLine, chrome: DocTemplateChrome): string {
-  return chrome.showTimestamps
-    ? `[${line.timestamp}] ${line.text}`
-    : line.text;
+  return chrome.showTimestamps ? `[${line.timestamp}] ${line.text}` : line.text;
 }
 
 function looksRtl(text: string): boolean {
