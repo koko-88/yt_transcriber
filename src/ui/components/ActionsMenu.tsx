@@ -1,6 +1,5 @@
-// Actions popover: copy modes + export formats/templates.
-// Uses a button trigger (not native <details>/<select>) for pointer, focus,
-// and keyboard behavior consistent with the rest of the panel.
+// Actions popover: copy modes + export formats.
+// Document templates are selected in the Export workspace before opening this menu.
 
 import { useEffect, useId, useRef, useState } from "react";
 import type { Transcript } from "../../core/model.js";
@@ -17,7 +16,7 @@ import {
   type ExportTextOptions,
 } from "../../core/export.js";
 import {
-  DOC_TEMPLATES,
+  getDocTemplate,
   type DocFormat,
   type DocTemplateId,
 } from "../../core/export-templates.js";
@@ -130,6 +129,7 @@ interface Props {
   transcript: Transcript;
   viewMode: ViewMode;
   tr: (key: MessageKey, params?: Record<string, string | number>) => string;
+  selectedTemplate?: DocTemplateId;
   onSave?: () => void;
   onAddNote?: () => void;
   canSave: boolean;
@@ -139,13 +139,13 @@ export function ActionsMenu({
   transcript,
   viewMode,
   tr,
+  selectedTemplate = "clean-transcript",
   onSave,
   onAddNote,
   canSave,
 }: Props) {
   const [open, setOpen] = useState(false);
-  const [panel, setPanel] = useState<"root" | "export" | "doc">("root");
-  const [docFormat, setDocFormat] = useState<DocFormat | null>(null);
+  const [panel, setPanel] = useState<"root" | "export">("root");
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
   const [includeTimestamps, setIncludeTimestamps] = useState(true);
@@ -153,6 +153,7 @@ export function ActionsMenu({
   const [exportView, setExportView] = useState<ViewMode>(viewMode);
   const rootRef = useRef<HTMLDivElement>(null);
   const menuId = useId();
+  const selectedTemplateMeta = getDocTemplate(selectedTemplate);
 
   useEffect(() => {
     if (!open) return;
@@ -188,18 +189,19 @@ export function ActionsMenu({
     setTimeout(() => setStatus(null), 1500);
   };
 
-  const runDoc = async (format: DocFormat, templateId: DocTemplateId) => {
+  const runDoc = async (format: DocFormat) => {
     setBusy(true);
     setStatus(null);
     try {
       const { generateDocument } = await import("../../core/export-docs.js");
-      const doc = await generateDocument(transcript, format, templateId);
+      const doc = await generateDocument(transcript, format, selectedTemplate);
       downloadBytes(doc.filename, doc.bytes, doc.mime);
       setStatus(tr("general.success"));
       setOpen(false);
       setPanel("root");
-    } catch {
-      setStatus(tr("general.error"));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      setStatus(detail || tr("general.error"));
     } finally {
       setBusy(false);
     }
@@ -211,10 +213,11 @@ export function ActionsMenu({
         type="button"
         className="btn action-trigger"
         aria-haspopup="menu"
-        aria-expanded={open && panel !== "root"}
+        aria-expanded={open && panel === "export"}
         onClick={() => {
           setOpen(true);
           setPanel("export");
+          setStatus(null);
         }}
       >
         {tr("transcript.export")}
@@ -223,11 +226,12 @@ export function ActionsMenu({
         type="button"
         className="btn action-trigger"
         aria-haspopup="menu"
-        aria-expanded={open}
+        aria-expanded={open && panel === "root"}
         aria-controls={menuId}
         onClick={() => {
-          setOpen((v) => !v);
+          setOpen((v) => (panel === "root" ? !v : true));
           setPanel("root");
+          setStatus(null);
         }}
       >
         {tr("transcript.actions")}
@@ -304,6 +308,43 @@ export function ActionsMenu({
               <div className="action-section-label">
                 {tr("transcript.export")}
               </div>
+              <div className="action-template-summary">
+                {tr(selectedTemplateMeta.labelKey as MessageKey)}
+              </div>
+
+              <div className="action-doc-formats" role="group">
+                <button
+                  type="button"
+                  className="btn"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={() => void runDoc("pdf")}
+                >
+                  {tr("transcript.export.pdf")}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={() => void runDoc("pptx")}
+                >
+                  {tr("transcript.export.pptx")}
+                </button>
+                <button
+                  type="button"
+                  className="btn"
+                  role="menuitem"
+                  disabled={busy}
+                  onClick={() => void runDoc("docx")}
+                >
+                  {tr("transcript.export.docx")}
+                </button>
+              </div>
+
+              <div className="action-section-label">
+                {tr("transcript.export.txt")}
+              </div>
               <div
                 className="action-view-choice"
                 role="group"
@@ -357,71 +398,6 @@ export function ActionsMenu({
                   {tr(ex.key)}
                 </button>
               ))}
-              <button
-                type="button"
-                className="btn"
-                role="menuitem"
-                disabled={busy}
-                onClick={() => {
-                  setDocFormat("docx");
-                  setPanel("doc");
-                }}
-              >
-                {tr("transcript.export.docx")}…
-              </button>
-              <button
-                type="button"
-                className="btn"
-                role="menuitem"
-                disabled={busy}
-                onClick={() => {
-                  setDocFormat("pdf");
-                  setPanel("doc");
-                }}
-              >
-                {tr("transcript.export.pdf")}…
-              </button>
-              <button
-                type="button"
-                className="btn"
-                role="menuitem"
-                disabled={busy}
-                onClick={() => {
-                  setDocFormat("pptx");
-                  setPanel("doc");
-                }}
-              >
-                {tr("transcript.export.pptx")}…
-              </button>
-            </>
-          )}
-
-          {panel === "doc" && docFormat && (
-            <>
-              <button
-                type="button"
-                className="btn action-back"
-                onClick={() => setPanel("export")}
-              >
-                ← {tr("transcript.export")}
-              </button>
-              <div className="action-section-label">
-                {tr("transcript.export.chooseTemplate")}
-              </div>
-              {DOC_TEMPLATES.filter((t) => t.formats.includes(docFormat)).map(
-                (t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    className="btn"
-                    role="menuitem"
-                    disabled={busy}
-                    onClick={() => void runDoc(docFormat, t.id)}
-                  >
-                    {tr(t.labelKey as MessageKey)}
-                  </button>
-                ),
-              )}
             </>
           )}
 
