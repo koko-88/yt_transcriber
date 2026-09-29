@@ -1,6 +1,10 @@
+import { useState } from "react";
 import { usePanelStore } from "../store.js";
 import { ActionsMenu } from "../components/ActionsMenu.js";
-import { DOC_TEMPLATES } from "../../core/export-templates.js";
+import {
+  DOC_TEMPLATES,
+  type DocTemplateId,
+} from "../../core/export-templates.js";
 import type { MessageKey } from "../../core/i18n.js";
 
 export function ExportView({
@@ -10,6 +14,8 @@ export function ExportView({
 }) {
   const s = usePanelStore();
   const transcript = s.transcript;
+  const [selectedTemplate, setSelectedTemplate] =
+    useState<DocTemplateId>("clean-transcript");
 
   if (!transcript) {
     return (
@@ -33,36 +39,46 @@ export function ExportView({
         </div>
       </div>
 
+      <section className="workspace-card export-templates">
+        <h3>{s.tr("transcript.export.chooseTemplate")}</h3>
+        <div className="export-template-grid">
+          {DOC_TEMPLATES.map((template) => {
+            const selected = selectedTemplate === template.id;
+            return (
+              <button
+                type="button"
+                className={`export-template-card${selected ? " is-selected" : ""}`}
+                key={template.id}
+                aria-pressed={selected}
+                onClick={() => setSelectedTemplate(template.id)}
+              >
+                <strong>{s.tr(template.labelKey as MessageKey)}</strong>
+                <span className="hint">
+                  {s.tr(template.descriptionKey as MessageKey)}
+                </span>
+                <span className="export-template-formats">
+                  {template.formats
+                    .map((format) => format.toUpperCase())
+                    .join(" · ")}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
       <section className="workspace-card export-card">
         <ActionsMenu
           transcript={transcript}
           viewMode={s.viewMode}
           tr={s.tr}
+          selectedTemplate={selectedTemplate}
           canSave={
             !s.recents.some((item) => item.transcriptId === transcript.id)
           }
           onSave={() => void s.saveCurrentToLibrary()}
           onAddNote={() => onNavigate("notes")}
         />
-      </section>
-
-      <section className="workspace-card export-templates">
-        <h3>{s.tr("transcript.export.chooseTemplate")}</h3>
-        <div className="export-template-grid">
-          {DOC_TEMPLATES.map((template) => (
-            <article className="export-template-card" key={template.id}>
-              <strong>{s.tr(template.labelKey as MessageKey)}</strong>
-              <span className="hint">
-                {s.tr(template.descriptionKey as MessageKey)}
-              </span>
-              <span className="export-template-formats">
-                {template.formats
-                  .map((format) => format.toUpperCase())
-                  .join(" · ")}
-              </span>
-            </article>
-          ))}
-        </div>
       </section>
     </div>
   );
