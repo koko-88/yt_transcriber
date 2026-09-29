@@ -62,7 +62,7 @@ async function generateBrowserPdf(
   lines: readonly RenderLine[],
   chrome: DocTemplateChrome,
 ): Promise<Uint8Array> {
-  const { PDFDocument, rgb } = await import("pdf-lib");
+  const { PDFDocument } = await import("pdf-lib");
   const pdf = await PDFDocument.create();
   const pageWidth = 612;
   const pageHeight = 792;
