@@ -20,7 +20,7 @@ jobs:
         if: env.CHROMATIC_PROJECT_TOKEN == ''
         run: echo "CHROMATIC_PROJECT_TOKEN is not configured; skipping visual regression."
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: env.CHROMATIC_PROJECT_TOKEN != ''
 
       - uses: actions/setup-node@v4
