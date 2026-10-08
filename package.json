@@ -84,7 +84,7 @@
     "fake-indexeddb": "^6.2.5",
     "playwright": "^1.63.0",
     "prettier": "^3.5.0",
-    "storybook": "^10.6.0",
+    "storybook": "^10.6.1",
     "style-dictionary": "^5.5.5",
     "typescript": "^5.8.0",
     "typescript-eslint": "^8.34.0",
