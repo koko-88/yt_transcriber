@@ -17,7 +17,7 @@ Transcript Workbench for YouTube. Current product intent: [PRODUCT.md](PRODUCT.m
 - Export + Actions; text, subtitle and document export; templates.
 - Settings, privacy/security, cross-browser behavior, verification and release.
 
-Grounding: `README.md`, `src/ui/App.tsx`, `src/stt/`, `src/translation/`, and historical `tasks/plan.md`. The historical AI work item is not automatically a current feature.
+Grounding: `README.md`, `src/ui/App.tsx`, `src/stt/`, `src/translation/`, and the dated work inventory recorded in [pre-build evaluation](implementation-scope/pre-build-packet/evaluation.md). The historical AI work item is not automatically a current feature.
 
 ## Decomposition status
 
@@ -38,4 +38,4 @@ Grounding: `README.md`, `src/ui/App.tsx`, `src/stt/`, `src/translation/`, and hi
 - [ ] Approve feature ID/name before creating feature-specific Spec Kit artifacts.
 - [ ] Link established code/tests/ADRs instead of duplicating whole historical plans.
 
-The existing `tasks/` folder remains historical input, **not** the executable roadmap.
+Former global task plans and unchecked todo were retired after their useful observations were indexed in the pre-build evaluation. Future executable task plans belong to an approved `specs/<feature>/tasks.md`.

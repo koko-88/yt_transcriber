@@ -41,3 +41,7 @@ The current top navigation is fixed in `src/ui/App.tsx`; it contains no AI tab.
 - No next-feature design, implementation scope, feature priority or acceptance matrix has yet been selected.
 
 Use [ROADMAP](ROADMAP.md) to select and bound a feature; use the [pre-build evaluation](implementation-scope/pre-build-packet/evaluation.md) to resolve contradictions.
+
+## Reconciled earlier engineering context
+
+The [original planning revision](https://github.com/koko-88/yt_transcriber/blob/2fb40899f70af7ff8197d21e4978176e33671c21/transcript_extension_plan.md) prioritized a single WXT extension, local-first workspace, canonical transcript identity, strict trust boundaries, least-privilege permissions, explicit error states, reproducible npm builds and independent browser acceptance. Its original remote AI-provider panel, telemetry variants and real-time tabCapture fallback were **later superseded**; those former plans must not be used as current product scope. It distinguished Chrome/Brave/Firefox from best-effort Tor behavior. No compiled manifest by itself proves runtime parity.

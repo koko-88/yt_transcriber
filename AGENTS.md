@@ -8,10 +8,10 @@ Tool-neutral entry point for coding agents. The organizational pattern follows `
 2. [PRODUCT.md](PRODUCT.md): current product inventory and known boundaries.
 3. [ROADMAP.md](ROADMAP.md): project-wide decomposition gate. No new feature is approved yet.
 4. [ARCHITECTURE.md](ARCHITECTURE.md): technical runtime and trust boundaries for implementation tasks.
-5. [Evidence entry point](implementation-scope/pre-build-packet/README.md) and [index](implementation-scope/pre-build-packet/evidence-index.md): existing evidence, conflicts, unknowns and source paths.
+5. [Pre-build evaluation](implementation-scope/pre-build-packet/evaluation.md): consolidated source index, historical findings, contradictions and missing evidence.
 6. Only **after choosing a feature**: that feature's `spec.md`, `plan.md`, `tasks.md`, checklists and necessary contracts.
 7. For execution routing: [workload profile](model-selection/workload-profile.md), [routing policy](model-selection/routing-policy.md), [runtime route registry](model-selection/runtime-route-registry.md). No route is qualified by this documentation change.
-8. For relevant tasks: existing `TESTING.md`, `RELEASE.md`, `package.json`, `.github/workflows/`, after reading their known stale-reference warnings.
+8. For relevant tasks: `TESTING.md`, `RELEASE.md`, `package.json`, and `.github/workflows/`; distinguish documented commands from checks actually run.
 
 Do not recursively read the entire repository or use historical notes as current requirements.
 
@@ -22,7 +22,7 @@ Do not recursively read the entire repository or use historical notes as current
 - Feature inventory, ownership, dependencies and roadmap: `ROADMAP.md`.
 - Live technical architecture: `ARCHITECTURE.md` and relevant implementation modules.
 - Significant historical decisions: `docs/adr/`. These retain their original context, including now-superseded AI behavior.
-- Source observation/readiness: `implementation-scope/pre-build-packet/`.
+- Source observation/readiness: `implementation-scope/pre-build-packet/evaluation.md`.
 - Approved feature specification/execution: `specs/<feature>/` once created.
 - Model/agent routing and qualification: `model-selection/`.
 - Executable verification: code, tests and CI; user-performed manual browser acceptance remains separate.
@@ -30,7 +30,7 @@ Do not recursively read the entire repository or use historical notes as current
 
 ## Legacy material
 
-`transcript_extension_plan.md`, `tasks/plan.md`, `tasks/review.md`, `tasks/todo.md` and dated ADRs contain useful history, but are **not active task authorization**. If they disagree with the current UI/source or PRODUCT, stop and document the contradiction.
+The retired historical planning revision, former project-wide tasks/review/todo, and local text logs were extracted into the canonical owners. Their original Git revision remains available [here](https://github.com/koko-88/yt_transcriber/blob/2fb40899f70af7ff8197d21e4978176e33671c21/transcript_extension_plan.md); the [evaluation](implementation-scope/pre-build-packet/evaluation.md) records material findings. Dated ADRs are history, not active task authorization.
 
 The current UI exposes Transcript, Library, Notes, Export + Actions, Settings (`src/ui/App.tsx`). The historical BYOK AI view is not a visible tab and its remote origins were removed from the manifest. Old `src/ai/` and IndexedDB stores still exist: do not re-enable or delete them by inference.
 
