@@ -25,13 +25,13 @@ zustand store.
 ┌────────────────────────────▼───────────────────────────────────────┐
 │ Background service worker (trusted router)                         │
 │   bus handlers → storage/*, permission checks                      │
-│   (long AI network calls do NOT run here — see ADR-0002 §5)        │
+│   session, media/STT messaging and persistent storage routes      │
 └────────────────────────────┬───────────────────────────────────────┘
                              │ runtime message bus
 ┌────────────────────────────▼───────────────────────────────────────┐
 │ Side panel (extension page, trusted)                               │
 │   ui/App + views + zustand store                                   │
-│   ai/runner executes provider fetches here (survives >30s TTFB)    │
+│   current Transcript/Library/Notes/Export/Settings workspaces     │
 └────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -79,29 +79,30 @@ failure rather than a blank transcript.
 | `transcripts`                | Full transcripts (keyed by `youtube:<videoId>:<trackId>`)                            |
 | `videos`                     | Video metadata                                                                       |
 | `recents`                    | Library list, capped at 50 entries (oldest pruned)                                   |
-| `aiCache`                    | AI results, capped at 200 entries (oldest pruned)                                    |
-| `secrets`                    | Provider API keys (extension origin)                                                 |
+| `aiCache`                    | Retained historical AI-cache schema; not exposed by current app                     |
+| `secrets`                    | Retained historical provider-key schema; not exposed by current app                 |
 | `notes`, `highlights`        | Timestamp-linked notes and segment highlights (V1)                                   |
-| `tags`, `video_tags`, `meta` | Reserved for tags surface; created in the v1 schema so using them needs no migration |
+| `edits`, `sttCheckpoints`     | Transcript correction history and STT recovery checkpoints                          |
+| `aiHistory`                  | Retained historical AI result store                                                  |
+| `tags`, `video_tags`, `meta` | Existing tag and metadata stores                                                     |
 
 `browser.storage.local` holds settings only, validated on read and on write.
 Database upgrades run through a versioned `upgrade()` callback; a blocked
 upgrade closes the connection and reopens instead of corrupting state.
 
-## AI layer
+## Current STT and translation
 
-- `registry.ts` — provider definitions (id, base URL, default model, whether a
-  key is required, whether it is local). Every remote provider maps to an
-  optional host permission origin.
-- `pipelines.ts` — prompt construction with a versioned prompt
-  (`PROMPT_VERSION`) and a character budget; transcript lines are timestamp-
-  anchored; Q&A uses BM25 retrieval; `validateCitations` / `groundAiOutput`
-  strip invented timestamps so they are never presented as valid.
-- `runner.ts` — the order of checks is deliberate: strict mode → consent →
-  host permission → secret → cache → rate limit → call. Failures map to the
-  typed `AI_*` error codes. **Execution runs in the side panel**, not the
-  background service worker (Chrome may terminate a SW when first-byte
-  latency exceeds ~30s).
+- `src/stt/media-reader.ts` uses Mediabunny range/lazy media reads with bounded PCM windows (25 s / 4 s overlap). This no-caption path is independent of watching the video in real time.
+- `src/stt/model-profile.ts` defines Whisper's English pivot, and `src/translation/worker.ts` plus `transcript.ts` define local Arabic generation with unchanged cue timing.
+- First-time local models download from Hugging Face to browser cache. Firefox currently lacks Chromium's offscreen local-STT execution host.
+- `src/providers/youtube/track-select.ts` synthesizes Arabic/English translated tracks when YouTube marks a source track translatable. The older ADR-0001 exclusion is historical.
+
+## Current panel and export
+
+- `src/ui/App.tsx` exposes Transcript, Library, Notes, Export + Actions, Settings. The historical remote AI tab is not present.
+- `src/ui/views/ExportView.tsx` selects a code-defined template and passes it into `ActionsMenu.tsx`; `src/core/export-templates.ts` defines three template IDs.
+- `src/core/export-docs.ts` owns generated documents. Its browser-rendered PDF path supports Arabic glyph rendering but uses page images rather than selectable PDF text.
+- `src/ai/` and prior IndexedDB AI stores remain as legacy source/schema, not active user-facing remote-AI functionality. Their migration/removal is not decided here.
 
 ## Error handling
 
@@ -117,6 +118,11 @@ translatable and never leaks internal detail.
 - `scripts/check-bundle-size.mjs` enforces per-chunk size budgets.
 - `scripts/check-licenses.mjs` verifies runtime dependency licenses and that
   `THIRD_PARTY_NOTICES.md` lists them.
-- Unit/integration tests run in vitest (node environment, no browser needed);
+- Vitest includes unit/integration plus configured Storybook browser tests;
   `e2e/` holds a Playwright smoke test that loads the built extension.
+  Live YouTube behavior and rendered document appearance remain separate acceptance.
 - Architecture decisions are recorded in `docs/adr/`.
+
+## Document authority
+
+[PRODUCT.md](PRODUCT.md) owns current product intent, [ROADMAP.md](ROADMAP.md) owns future feature decomposition, and [implementation-scope/pre-build-packet/evaluation.md](implementation-scope/pre-build-packet/evaluation.md) records unresolved documentation and runtime-proof gaps. Dated ADRs are historical decisions, not authorization to restore the old remote-AI product.
