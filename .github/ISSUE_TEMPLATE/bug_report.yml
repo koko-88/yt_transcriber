@@ -36,7 +36,7 @@ body:
         - Search / navigation
         - Export
         - Library
-        - AI / provider setup
+        - Local STT / translation
         - Settings, theme or RTL
         - Build or tooling
     validations:
