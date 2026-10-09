@@ -118,6 +118,16 @@ upgrade closes the connection and reopens instead of corrupting state.
   source/schema, not active user-facing remote AI.
   Their migration or removal is not decided here.
 
+## UI design system and previous guidance
+
+The panel/sidebar mounts React outside YouTube's DOM, and playback state reaches it through the message bus. The earlier UI engineering note described a caption-first narrow layout (approximately 320–600 CSS px), light/dark semantic roles, distinct selected and playing states, keyboard focus, and Arabic RTL logical properties. These are **historical design intentions**, not proof of current visual acceptance.
+
+- `tokens/core.json` defines primitive colors, spacing, typography and radii; `tokens/semantic.json` defines light/dark roles; `tokens/components.json` holds dimensions. All use DTCG `$type`/`$value`.
+- `style-dictionary.config.mjs` and `scripts/build-tokens.mjs` generate `src/ui/tokens/generated/tokens.css`; do not edit generated CSS manually.
+- `src/ui/theme.css` maps tokens to `--ui-*` aliases; the npm dev/build/compile/Storybook lifecycle regenerates tokens.
+- `src/ui/panel-layout.css`, `src/ui/views/` and `src/ui/components/` own current runtime layout, tab content and controls.
+- Storybook with a11y checks, Playwright with axe, and user manual RTL/short-panel reviews cover separate acceptance surfaces; none alone proves PDF/PPTX visual fidelity.
+
 ## Error handling
 
 `AppError` carries a `code`, `retryable`, `userMessageKey` and redacted
@@ -137,6 +147,10 @@ translatable and never leaks internal detail.
   Live YouTube behavior and rendered document appearance remain
   separate acceptance.
 - Architecture decisions are recorded in `docs/adr/`.
+
+## Historical alternatives
+
+The original [research and implementation plan](https://github.com/koko-88/yt_transcriber/blob/2fb40899f70af7ff8197d21e4978176e33671c21/transcript_extension_plan.md) evaluated WXT versus Plasmo, CRXJS and manual bundling; UI/storage alternatives; and a reference-only fork of `ANcpLua/yt-transcript`. Its M0 browser/acquisition validation matrix was **proposed, not executed**. Current source and existing ADRs supersede its historical acquisition candidates, remote AI-provider flows, telemetry, and real-time tabCapture approach.
 
 ## Document authority
 

@@ -71,7 +71,7 @@ jobs:
   # Store submission is intentionally gated behind the protected `release`
   # environment (manual approval) AND requires credentials that are not
   # available in CI yet. Enable by uncommenting and configuring the environment
-  # secrets listed in docs/GITHUB_SETUP.md.
+  # secrets listed in RELEASE.md.
   #
   # publish-stores:
   #   name: publish to stores

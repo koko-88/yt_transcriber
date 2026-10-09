@@ -1,60 +1,42 @@
-# Testing
+# Testing and acceptance
 
-## Automated gates (run locally / CI)
+Executable checks and their actual results, not dated console logs, determine verified status. See [PRODUCT.md](PRODUCT.md) for user obligations and [ARCHITECTURE.md](ARCHITECTURE.md) for code boundaries.
+
+## Automated checks
 
 ```bash
 npm ci
 npm run compile
 npm run lint
 npm run format:check
-npm run test                 # vitest unit + integration (offline)
+npm run test
 npm run build
 npm run build:firefox
 npm run check:manifest
 npm run check:bundle
 npm run check:licenses
-npm run web-ext:lint         # after Firefox build
-npx playwright install chromium   # once; required for extension E2E
-npm run test:e2e             # Playwright + axe (needs Chrome for Testing)
+npm run audit:security
+npm run web-ext:lint
+npm run test:e2e
 ```
 
-`npm run verify` runs compile, lint, format, unit tests, both builds, bundle and
-license checks.
+`npm run verify` covers typecheck, lint, format, Vitest, both builds, and manifest/bundle/license checks. CI additionally runs security audit, Mozilla lint, Playwright extension smoke testing, ZIP packaging, checksums and artifact upload.
 
-### What each layer proves
+**Limits:** Vitest covers unit/integration and configured Storybook browser tests. Playwright E2E uses the supported Playwright Chromium extension loader, not live YouTube availability; branded Chrome 137+ ignores the old `--load-extension` workflow. A skipped E2E test or green build does not prove player `pot` acquisition, translation, full-audio STT, real browser parity or actual document appearance.
 
-| Layer                   | Proves                                                                                                                          | Does **not** prove        |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Vitest unit/integration | Parsers, search/highlight alignment, track selection, timedtext URL matching, citation grounding, backup schema, security gates | Real YouTube `pot` gating |
-| Playwright E2E          | Extension boot, panel tabs, Strict Local Mode, theme/RTL, library empty, not-a-video banner, axe A/AA                           | Live caption acquisition  |
-| Live manual / canary    | Real acquisition (gated videos, SPA nav, restore)                                                                               | —                         |
+## User manual runtime and visual acceptance
 
-### Playwright / Chrome note
+These are historical and source-derived acceptance scenarios; they have **not been executed in this documentation cleanup**.
 
-Branded Chrome **137+** ignores `--load-extension`. E2E must use Playwright's
-Chromium build (Chrome for Testing), **not** `channel: "chrome"`. If Chromium
-is missing, the suite skips with an install hint rather than failing CI opaque
-timeouts.
+1. Manual/ASR captions, multi-language, paused-before-open, Shorts, SPA A-to-B navigation, player caption/mute/playback restoration.
+2. Arabic and English language availability only where a real source/YouTube translation/local completion exists; explicit errors for missing/partial output.
+3. Chromium no-caption full-audio processing independent of real-time playback, bounded memory, progress, cancel, resume and generated Arabic. Firefox local-STT offscreen host is a documented gap.
+4. Search Arabic/RTL, playback follow and seek identity, saved library, notes, corrections/undo, local backup/import.
+5. Export + Actions selected template, timestamps and content for text/subtitle formats and visual DOCX/PDF/PPTX output. The current PDF uses rasterized pages, not selectable/searchable PDF text.
+6. Keyboard focus and accessible semantics, light/dark, RTL, and approximately 320–600 CSS px panel widths. Brave requires release smoke.
 
-## Manual acceptance (release)
-
-1. Load unpacked Chromium build (`.output/chrome-mv3`) and Firefox
-   (`.output/firefox-mv2`).
-2. Open several YouTube videos: manual captions, ASR, multi-language, Shorts,
-   no-captions, long video, paused-before-open, SPA navigate A→B.
-3. Confirm player caption/mute/pause/position are restored after acquisition.
-4. Search Arabic text with/without diacritics; follow mode in paragraph view.
-5. Save → Library search → backup export/import → confirm secrets absent from
-   backup JSON.
-6. AI: Strict Local Mode blocks remote; Ollama/LM Studio and one remote provider
-   with consent; cancel mid-run; invented timestamps in chapters are marked `[?]`.
-7. Keyboard-only pass through all tabs; RTL Arabic UI; light/dark themes;
-   panel widths ~320px and ~600px.
-8. Brave smoke once per release (CWS Chromium build).
+The old AI provider setup/Strict Local Mode and AI-tab checklist is **not** current product acceptance. The user performs final browser/visual approval; do not substitute repeated agent browser-open/close loops.
 
 ## Accessibility
 
-- Automated: `@axe-core/playwright` on Transcript / Library / AI / Settings tabs
-  (WCAG 2 A/AA tags; critical/serious must be empty).
-- Manual: tab order, visible focus, status announcements, contrast, reduced
-  motion, RTL.
+Storybook a11y and `@axe-core/playwright` support automated review. Manual keyboard order, focus, announcements, contrast, reduced-motion and RTL remain necessary acceptance surfaces. Current navigation: Transcript, Library, Notes, Export + Actions, Settings.

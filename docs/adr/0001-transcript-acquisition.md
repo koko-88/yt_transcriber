@@ -1,6 +1,7 @@
 # ADR 0001: YouTube caption acquisition
 
-- Status: Updated 2026-09-25
+- Status: Updated 2026-09-25 (historical acquisition decision)
+- Superseded point: current `src/providers/youtube/track-select.ts` can synthesize `tlang` Arabic/English tracks where a source is marked translatable; the old no-translated-tracks claim is no longer current.
 - Scope: The active YouTube watch video in the current browser window
 
 ## Runtime observations

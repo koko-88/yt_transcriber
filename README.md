@@ -149,3 +149,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY
 ## License
 
 MIT — see [LICENSE](LICENSE). Third-party licenses: [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+
+## Engineering workflow and project authority
+
+[AGENTS.md](AGENTS.md) defines the agent read path; [PRODUCT.md](PRODUCT.md) owns current scope and [ROADMAP.md](ROADMAP.md) gates new feature decomposition. [The pre-build evaluation](implementation-scope/pre-build-packet/evaluation.md) indexes relevant source, historical findings and outstanding requirements. The official Spec Kit CLI and agent integrations are **not installed yet** by the provisional `.specify/memory/constitution.md` alone.

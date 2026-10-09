@@ -55,3 +55,7 @@ storybook-static
 .ui-install.*
 .ui-update.*
 .npm-ci.*
+
+# Ad hoc developer console captures; GitHub Actions is the current CI record
+/build-out.txt
+/test-out*.txt
