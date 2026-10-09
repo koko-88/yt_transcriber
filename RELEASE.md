@@ -12,7 +12,7 @@ and the release workflow fails if the tag does not match the manifest version.
 ```bash
 npm ci
 npm run verify          # typecheck, lint, format, tests, both builds, budgets, licenses
-npm run web-ext:lint    # Mozilla linter (must be 0 errors, 0 warnings)
+npm run web-ext:lint    # Mozilla linter; inspect warnings before submission
 ```
 
 Then run the manual checklist in [TESTING.md](TESTING.md) — live YouTube
@@ -51,9 +51,9 @@ the workflow run that produced them.
    artifacts. Bundles are deterministic for the same lockfile, Node major
    version and OS path length; `wxt` records sourcemaps in the sources zip.
 
-AMO review note: the extension does not use remote code, `eval`, or
-`web_accessible_resources`. The MAIN-world content script only reads player
-state and observes the page's own caption requests.
+AMO review note: no remote script URLs or declared
+`web_accessible_resources` are intended. Mozilla static lint warnings may
+still flag bundled code and must be examined before store submission.
 
 ## 5. Publishing
 
@@ -80,14 +80,28 @@ The GitHub release workflow is intentionally split:
 
 - **Name:** Transcript Workbench for YouTube (trademark-safe: descriptive, no
   Google/YouTube branding assets).
-- **Short description:** "Private transcript workspace for YouTube. Your data
-  stays local, your AI is your choice."
+- **Short description:** "Private transcript workspace for YouTube. Your saved
+  work stays local."
 - **Categories:** Productivity.
 - **Permissions justification:** copy the table from [SECURITY.md](SECURITY.md).
 - **Privacy policy URL:** the repository's `PRIVACY.md` (or the Pages rendering
   of it).
 - **Screenshots:** capture the transcript tab (paragraph view), the library tab,
-  the AI tab mid-answer, and the Arabic RTL layout at 400 px panel width.
+  Export + Actions with a selected document template, and the Arabic RTL
+  layout at 400 px panel width.
   `docs/screenshots/` is the intended location; keep them 1280×800 or 640×400.
 - **Release notes:** summarise changes since the last tag; mention when the
   acquisition ladder or permissions changed.
+
+## GitHub operations and account configuration
+
+This section replaces the former separate GitHub setup runbook. The following are account-level settings to **verify**; a repository Markdown/YAML file is not proof these UI controls are enabled.
+
+- **Ruleset:** protect `main` with PR review, required status checks such as `verify`, up-to-date branches, linear history and no forced pushes/deletions. Confirm exact approval and bypass behavior in GitHub Settings.
+- **Actions:** maintain read-only default workflow permissions; release jobs request scoped write/provenance permissions. Review fork approval and action-access settings.
+- **Security:** verify Dependabot alerts and security updates, secret scanning/push protection, private vulnerability reporting and CodeQL default setup. The repo includes `.github/dependabot.yml` and `.github/workflows/dependency-review.yml`, but these are not all account-level toggles.
+- **Release environment:** the commented-out store-publishing job requires a protected `release` environment, human reviewer, eligible tags/branches and store secrets listed above before activation.
+- **Web presence:** no GitHub Pages workflow currently ships. Policy URLs can point to repository Markdown or a later approved public website.
+- **Repository metadata:** update description/topics for the current local-first non-BYOK product, not the former AI-provider positioning; preserve the non-affiliation disclaimer in `THIRD_PARTY_NOTICES.md`.
+
+GitHub governance, package creation, store publishing and actual installed-product behavior are different acceptance layers.

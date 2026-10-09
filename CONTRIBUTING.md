@@ -17,8 +17,9 @@ npm run dev     # or: npm run dev:firefox
 npm run verify
 ```
 
-That is the same gate CI runs: strict TypeScript, ESLint (0 warnings), Prettier,
-vitest, both browser builds, bundle budgets and license checks. Fix the root
+That covers the core checks: strict TypeScript, ESLint (0 warnings), Prettier,
+Vitest, both browser builds, bundle budgets and license checks. CI also runs
+dependency audit, Mozilla lint, packaging and artifact handling. Fix the root
 cause rather than disabling a rule; if a rule genuinely should not apply, use a
 narrow inline disable with a comment explaining why.
 
@@ -30,8 +31,9 @@ narrow inline disable with a comment explaining why.
 2. **Validate everything that crosses a boundary** with zod: bus payloads,
    MAIN→ISOLATED messages, provider responses, stored records, settings patches.
    Declare the sender class for every new bus handler.
-3. **Never log or serialize secrets.** Use `Secret` for key material; never add
-   a payload to a log line; never put a key in a URL.
+3. **Never log or serialize secrets.** Old AI-key storage schema remains but
+   current UI does not request provider keys. Never put key material, private
+   URLs or transcript contents in diagnostic logs.
 4. **No remote code, no HTML injection.** No `eval`, `new Function`,
    `innerHTML`, `dangerouslySetInnerHTML`, or scripts loaded from the network.
    Render untrusted text as text.
@@ -46,7 +48,7 @@ narrow inline disable with a comment explaining why.
 
 ## Commit style
 
-`type(scope): summary` — e.g. `fix(ai): send Gemini key in header`,
+`type(scope): summary` — e.g. `fix(export): preserve selected template`,
 `test(parsers): cover hour-less VTT timestamps`. Keep refactors separate from
 behaviour changes.
 

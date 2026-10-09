@@ -1,11 +1,10 @@
 # ADR 0002: Hardening deviations from the implementation plan
 
-- Status: Accepted (hardening pass, 2026-09-24)
+- Status: Accepted historically (hardening pass, 2026-09-24); remote AI product flow later superseded
+- Current authority: `PRODUCT.md`, `src/ui/App.tsx`, `wxt.config.ts`.
 - Deciders: engineering
 
-This records where the shipped implementation intentionally differs from
-`transcript_extension_plan.md`, with the evidence that justified each change.
-Everything else in the plan is implemented as written.
+This records historical decisions relative to the [original planning revision](https://github.com/koko-88/yt_transcriber/blob/2fb40899f70af7ff8197d21e4978176e33671c21/transcript_extension_plan.md). The original claim that everything else was implemented is **not** a statement about current code. Its old BYOK and optional Firefox provider-permission discussion does not supersede present manifests.
 
 ## 1. The provider boundary is structural, not nominal
 
