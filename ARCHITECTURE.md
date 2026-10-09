@@ -79,10 +79,10 @@ failure rather than a blank transcript.
 | `transcripts`                | Full transcripts (keyed by `youtube:<videoId>:<trackId>`)                            |
 | `videos`                     | Video metadata                                                                       |
 | `recents`                    | Library list, capped at 50 entries (oldest pruned)                                   |
-| `aiCache`                    | Retained historical AI-cache schema; not exposed by current app                     |
-| `secrets`                    | Retained historical provider-key schema; not exposed by current app                 |
+| `aiCache`                    | Retained historical AI-cache schema; not exposed by current app                      |
+| `secrets`                    | Retained historical provider-key schema; not exposed by current app                  |
 | `notes`, `highlights`        | Timestamp-linked notes and segment highlights (V1)                                   |
-| `edits`, `sttCheckpoints`     | Transcript correction history and STT recovery checkpoints                          |
+| `edits`, `sttCheckpoints`    | Transcript correction history and STT recovery checkpoints                           |
 | `aiHistory`                  | Retained historical AI result store                                                  |
 | `tags`, `video_tags`, `meta` | Existing tag and metadata stores                                                     |
 

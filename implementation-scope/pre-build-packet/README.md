@@ -2,7 +2,7 @@
 
 **Status: SOURCE/KNOWLEDGE INDEX ONLY. Feature-specific evidence readiness not yet assessed.**
 
-Mirrors the *role* of the corresponding Web Reconstruction packet, not its website captures. Read [PRODUCT.md](../../PRODUCT.md) and [ARCHITECTURE.md](../../ARCHITECTURE.md), then use [evidence-index.md](evidence-index.md) for exact current paths and [evaluation.md](evaluation.md) for contradictions and missing evidence.
+Mirrors the _role_ of the corresponding Web Reconstruction packet, not its website captures. Read [PRODUCT.md](../../PRODUCT.md) and [ARCHITECTURE.md](../../ARCHITECTURE.md), then use [evidence-index.md](evidence-index.md) for exact current paths and [evaluation.md](evaluation.md) for contradictions and missing evidence.
 
 No new capture, browser proof, model benchmark, design screenshot or approved specification was generated during this repo-structure adoption.
 
